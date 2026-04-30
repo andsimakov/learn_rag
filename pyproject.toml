@@ -35,6 +35,10 @@ packages = ["app", "ingestion", "eval"]
 line-length = 120
 target-version = "py312"
 
+[tool.ruff.lint.isort]
+known-first-party = ["app", "eval", "ingestion"]
+section-order = ["future", "standard-library", "third-party", "first-party", "local-folder"]
+
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "W292"]
 

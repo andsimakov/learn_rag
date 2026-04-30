@@ -89,3 +89,39 @@ Re-run `make ingest` after any chunker change.
 - Services orchestrate core primitives — no SQL or HTTP inside services.
 - Core modules are stateless infrastructure — no business logic.
 - All LLM calls go through `app/core/llm.py`; all tracing through `app/core/tracing.py`.
+
+## Pydantic rules
+
+- Always use Pydantic v2 syntax: model_dump(), model_copy(update={...})
+- FORBIDDEN: .dict() — this is Pydantic v1, always use .model_dump()
+- FORBIDDEN: mutating Pydantic model fields directly (e.g. book.status = x)
+- Separate input/output schemas: CreateSchema, UpdateSchema, ResponseSchema
+
+## FastAPI rules
+
+- FORBIDDEN: using fastapi.status module name as query/path parameter names — it causes shadowing
+  (e.g. use status_filter instead of status for query params)
+- Never hardcode HTTP status codes, always use fastapi.status constants
+- Always extract repeated 404 logic into a get_or_404() helper, never duplicate it inline
+
+## Python rules
+
+- FORBIDDEN: from typing import Dict, List, Tuple — use built-in generics instead: dict, list, tuple
+- Use Python 3.12+ syntax: dict[str, int], list[Book], X | None instead of Optional[X]
+- Avoid shadowing built-ins (count, type, id, list, dict, etc.) in variable names
+- Use dict comprehension for stats: {s.value: 0 for s in SomeEnum}
+
+## Concise Docstrings
+
+Write comments following these rules:
+- Write brief, to-the-point docstrings- avoid AI-generated verbose explanations
+- Module docstrings: Single line describing purpose (e.g., `"""Core authentication functions used across all modules"""`)
+- Function docstrings: One-line summary for simple functions, Google-style with Args/Returns only when needed
+- Simple helpers: One line is enough (e.g., `"""Extract the first path segment from a URL path."""`)
+- Complex functions: Add Args/Returns/Examples only when they add real value, not boilerplate
+
+## General
+
+- All code must be production-ready, not tutorial-level
+- Prefer itertools.count() over global state for ID generation
+- Prefer uuid.uuid4() for IDs when order does not matter
