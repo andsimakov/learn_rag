@@ -1,4 +1,4 @@
-# learn-rag
+# learn_rag
 
 A RAG service that answers questions about FastAPI by searching its own documentation.
 Intentionally built without LangChain — direct control over chunking, retrieval, and prompt construction.

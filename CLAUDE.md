@@ -54,7 +54,7 @@ eval/              # offline evaluation (golden_dataset.json + LLM-as-judge)
 
 **hatchling can't find packages on `pip install -e .`**
 Add `[tool.hatch.build.targets.wheel] packages = ["app", "ingestion", "eval"]` to `pyproject.toml`.
-Hatchling looks for a directory matching the project name (`learn-rag`) and finds nothing.
+Hatchling looks for a directory matching the project name (`learn_rag`) and finds nothing.
 
 **`ValueError: unknown type: public.vector` on pool init**
 The pgvector pool `init` callback runs `register_vector()` before the schema is applied, so the
