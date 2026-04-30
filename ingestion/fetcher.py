@@ -5,9 +5,24 @@ import httpx
 
 _REPO = "fastapi/fastapi"
 _BRANCH = "master"
-_DOCS_PREFIX = "docs/en/docs/"
+_DOCS_ROOT = "docs/en/docs/"
 _RAW_BASE = f"https://raw.githubusercontent.com/{_REPO}/{_BRANCH}"
 _TREE_URL = f"https://api.github.com/repos/{_REPO}/git/trees/{_BRANCH}"
+
+# Only ingest reference-quality content. Excluded: release-notes (43% of
+# chunks, changelog noise), community pages, management, benchmarks, etc.
+_ALLOWED_PREFIXES = (
+    "docs/en/docs/tutorial/",
+    "docs/en/docs/advanced/",
+    "docs/en/docs/how-to/",
+    "docs/en/docs/reference/",
+    "docs/en/docs/deployment/",
+)
+_ALLOWED_FILES = {
+    "docs/en/docs/python-types.md",
+    "docs/en/docs/async.md",
+    "docs/en/docs/features.md",
+}
 
 # Keep concurrent downloads reasonable to avoid being rate-limited.
 _SEMAPHORE = asyncio.Semaphore(10)
@@ -44,7 +59,9 @@ async def fetch_fastapi_docs() -> list[DocFile]:
         paths = [
             item["path"]
             for item in response.json()["tree"]
-            if item["type"] == "blob" and item["path"].startswith(_DOCS_PREFIX) and item["path"].endswith(".md")
+            if item["type"] == "blob"
+            and item["path"].endswith(".md")
+            and (any(item["path"].startswith(p) for p in _ALLOWED_PREFIXES) or item["path"] in _ALLOWED_FILES)
         ]
 
         print(f"Found {len(paths)} markdown files")

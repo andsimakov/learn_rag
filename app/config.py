@@ -24,7 +24,7 @@ class Settings(BaseSettings):
 
     # App
     log_level: str = "INFO"
-    top_k_default: int = 5
+    top_k_default: int = 8
 
 
 @lru_cache

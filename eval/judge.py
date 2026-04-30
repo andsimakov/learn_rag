@@ -1,4 +1,5 @@
 import json
+import re
 
 import anthropic
 
@@ -59,5 +60,9 @@ async def judge(
         ],
     )
 
-    data = json.loads(response.content[0].text)
+    text = response.content[0].text
+    match = re.search(r"\{.*\}", text, re.DOTALL)
+    if not match:
+        raise ValueError(f"No JSON object in judge response: {text!r}")
+    data = json.loads(match.group())
     return EvalScore(**data)
