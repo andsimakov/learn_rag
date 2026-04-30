@@ -1,0 +1,62 @@
+[
+  {
+    "question": "How do I declare path parameters in FastAPI?",
+    "reference_answer": "Path parameters are declared directly in the URL path string using curly braces, e.g. @app.get('/items/{item_id}'). The function parameter with the same name receives the value automatically. Adding a type annotation like item_id: int enables automatic parsing and validation."
+  },
+  {
+    "question": "How do I make a query parameter optional in FastAPI?",
+    "reference_answer": "Declare it with a default value of None, e.g. q: str | None = None. Parameters with no default are required; parameters with a default (including None) are optional. Using Optional[str] = None also works."
+  },
+  {
+    "question": "How do I declare a request body in FastAPI?",
+    "reference_answer": "Create a Pydantic BaseModel subclass with the fields you need, then declare it as a function parameter. FastAPI will read the JSON request body, validate it, and inject the model instance. Path and query parameters can coexist with a body parameter."
+  },
+  {
+    "question": "What is the purpose of response_model in FastAPI?",
+    "reference_answer": "response_model tells FastAPI what Pydantic model to use when serializing the response. It filters out fields not in the model, validates the output, and generates accurate OpenAPI docs. It lets you return internal objects while controlling what gets sent to the client."
+  },
+  {
+    "question": "How do dependencies work in FastAPI?",
+    "reference_answer": "Dependencies are declared with Depends(). A dependency is any callable that FastAPI calls before your route function and injects its return value. They support nesting, share resources across requests, and can have their own dependencies. Common uses are DB sessions, authentication, and shared business logic."
+  },
+  {
+    "question": "How do I handle HTTP errors in FastAPI?",
+    "reference_answer": "Raise HTTPException with a status_code and optional detail string. FastAPI catches it and returns the appropriate HTTP response. You can also register custom exception handlers with @app.exception_handler to handle specific exception types globally."
+  },
+  {
+    "question": "How do I define async route handlers in FastAPI?",
+    "reference_answer": "Declare the function with async def. FastAPI fully supports async/await. Use async def when calling async libraries (asyncpg, httpx, etc.). Use regular def if the code is blocking and CPU-bound — FastAPI will run it in a thread pool automatically."
+  },
+  {
+    "question": "How do I add CORS support to a FastAPI application?",
+    "reference_answer": "Add CORSMiddleware via app.add_middleware(CORSMiddleware, allow_origins=[...], allow_methods=[...], allow_headers=[...]). Set allow_origins=['*'] to allow all origins, or list specific domains. Also set allow_credentials=True if cookies or Authorization headers are needed."
+  },
+  {
+    "question": "What is APIRouter and why would I use it?",
+    "reference_answer": "APIRouter groups related routes into a separate module, similar to a Blueprint in Flask. Use app.include_router(router, prefix='/items', tags=['items']) to mount it. This keeps large apps organized — each domain (users, items, orders) lives in its own router file."
+  },
+  {
+    "question": "How do background tasks work in FastAPI?",
+    "reference_answer": "Declare a BackgroundTasks parameter in your route function. Call background_tasks.add_task(fn, arg1, arg2) to schedule work that runs after the response is sent. Useful for sending emails or triggering side effects without making the client wait."
+  },
+  {
+    "question": "How do I accept file uploads in FastAPI?",
+    "reference_answer": "Use File() and UploadFile as parameter types. UploadFile provides async methods: .read(), .write(), and .close(), plus metadata like .filename and .content_type. For small files you can use bytes with File(); for large files prefer UploadFile to avoid loading everything into memory."
+  },
+  {
+    "question": "How do I use Pydantic models with nested objects in FastAPI?",
+    "reference_answer": "Declare a Pydantic model as a field type inside another model. FastAPI handles nested validation automatically. You can also use List[Item] or list[Item] for arrays of nested models. Pydantic recursively validates and serializes the entire nested structure."
+  },
+  {
+    "question": "How do I test FastAPI endpoints?",
+    "reference_answer": "Use TestClient from fastapi.testclient, which wraps httpx. Create the client with TestClient(app) and use it like a regular httpx client. For async tests, use httpx.AsyncClient with ASGITransport. Override dependencies via app.dependency_overrides to inject test doubles."
+  },
+  {
+    "question": "How do I add middleware to a FastAPI app?",
+    "reference_answer": "Use @app.middleware('http') to define a function that receives request and call_next, or use app.add_middleware(SomeMiddleware, ...) for class-based middleware. Middleware wraps every request/response cycle, so keep it lightweight."
+  },
+  {
+    "question": "How do I return different status codes from a FastAPI route?",
+    "reference_answer": "Set the default with status_code= on the decorator, e.g. @app.post('/items', status_code=201). To return a different code dynamically, use Response(status_code=...) or raise HTTPException. You can also declare additional responses in the responses parameter of the decorator for OpenAPI docs."
+  }
+]
