@@ -16,7 +16,7 @@ RAG-powered Q&A over FastAPI documentation. See `DESIGN.md` for full architectur
 
 ```bash
 cp .env.example .env   # fill in ANTHROPIC_API_KEY and LANGFUSE_* keys
-make install           # install deps into active virtualenv
+make install           # install deps + set up pre-commit hooks
 make db-up             # start PostgreSQL with pgvector
 make ingest            # fetch FastAPI docs → chunk → embed → store (run once)
 make dev               # start API at http://localhost:8000

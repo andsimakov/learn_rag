@@ -3,8 +3,9 @@
 # ── Environment ───────────────────────────────────────────────────────────────
 
 .PHONY: install
-install:  ## Install all dependencies (including dev)
+install:  ## Install all dependencies (including dev) and set up pre-commit hooks
 	uv pip install -e ".[dev]"
+	pre-commit install
 
 # ── Database ──────────────────────────────────────────────────────────────────
 

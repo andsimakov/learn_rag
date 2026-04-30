@@ -21,7 +21,7 @@ Intentionally built without LangChain — direct control over chunking, retrieva
 
 ```bash
 cp .env.example .env      # add ANTHROPIC_API_KEY and LANGFUSE_* keys
-make install              # install dependencies
+make install              # install dependencies + set up pre-commit hooks
 make db-up                # start PostgreSQL with pgvector
 make ingest               # fetch docs, embed, store — run once
 make dev                  # API at http://localhost:8000
