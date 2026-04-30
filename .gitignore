@@ -1,0 +1,32 @@
+# Environment
+.env
+
+# Virtual environment
+.venv/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.ruff_cache/
+
+# Build / packaging
+dist/
+*.egg-info/
+
+# HuggingFace model cache downloaded at runtime
+# (sentence-transformers pulls models here if HF_HOME is not set)
+.cache/
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# Agents
+.qodo/
+
+# Obsidian
+.obsidian/workspace.json
+.obsidian/workspace-mobile.json
