@@ -42,6 +42,22 @@ async def _download(client: httpx.AsyncClient, path: str) -> DocFile:
         return DocFile(path=path, content=response.text)
 
 
+async def fetch_code_files(paths: list[str]) -> dict[str, str]:
+    """Fetch a list of source files (e.g. docs_src/**/*.py) and return {path: content}."""
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        results = await asyncio.gather(
+            *[_download(client, p) for p in paths],
+            return_exceptions=True,
+        )
+    code_map: dict[str, str] = {}
+    for path, result in zip(paths, results):
+        if isinstance(result, Exception):
+            print(f"  Warning: could not fetch {path}: {result}")
+        else:
+            code_map[result.path] = result.content
+    return code_map
+
+
 async def fetch_fastapi_docs() -> list[DocFile]:
     """
     1. Fetch the full repo tree from the GitHub API (1 API call).

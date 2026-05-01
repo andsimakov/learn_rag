@@ -11,21 +11,27 @@ class Chunk:
 
 
 _HEADING_RE = re.compile(r"^(#{1,3} .+)$", re.MULTILINE)
-# FastAPI docs use {* path/to/file.py hl[n] *} to include code examples.
-_MDX_INCLUDE_RE = re.compile(r"\{\*[^*]*\*\}")
+# FastAPI docs use {* path/to/file.py [hl[n]] *} to include code examples.
+# We replace them with fetch markers; pipeline substitutes actual code before embedding.
+_MDX_INCLUDE_RE = re.compile(r"\{\*\s*([^\s*}]+)[^*]*\*\}")
+_FETCH_MARKER_RE = re.compile(r"<<<FETCH:([^>]+)>>>")
 # Headings carry HTML anchors: "Path Parameters { #path-parameters }"
 _HEADING_ANCHOR_RE = re.compile(r"\s*\{[^}]+\}\s*$")
 # Collapse runs of blank lines left behind after stripping directives.
 _BLANK_LINES_RE = re.compile(r"\n{3,}")
 
-# Chunks larger than this get split further.
-_MAX_CHARS = 800
+# Larger limit than before to keep prose + one code example in a single chunk.
+_MAX_CHARS = 1500
 # Overlap carried over between split sub-chunks to preserve boundary context.
 _OVERLAP = 100
 
 
 def _clean(text: str) -> str:
-    text = _MDX_INCLUDE_RE.sub("", text)
+    def _make_marker(m: re.Match) -> str:
+        path = re.sub(r"^(\.\./)+", "", m.group(1))
+        return f"<<<FETCH:{path}>>>"
+
+    text = _MDX_INCLUDE_RE.sub(_make_marker, text)
     text = _BLANK_LINES_RE.sub("\n\n", text)
     return text.strip()
 
@@ -39,6 +45,8 @@ def chunk_document(source_path: str, content: str) -> list[Chunk]:
 
     Splits on # / ## / ### headings, then sub-splits oversized sections with
     a character-level sliding window so no chunk exceeds _MAX_CHARS.
+    MDX include directives are replaced with <<<FETCH:path>>> markers;
+    call substitute_code() after fetching the referenced files.
     """
     parts = _HEADING_RE.split(content)
 
@@ -83,6 +91,40 @@ def chunk_document(source_path: str, content: str) -> list[Chunk]:
                 chunk_index += 1
 
     return chunks
+
+
+def extract_fetch_paths(chunks: list[Chunk]) -> list[str]:
+    """Return unique file paths referenced by <<<FETCH:...>>> markers."""
+    seen: set[str] = set()
+    paths: list[str] = []
+    for chunk in chunks:
+        for m in _FETCH_MARKER_RE.finditer(chunk.content):
+            path = m.group(1)
+            if path not in seen:
+                seen.add(path)
+                paths.append(path)
+    return paths
+
+
+def substitute_code(chunks: list[Chunk], code_map: dict[str, str]) -> list[Chunk]:
+    """Replace <<<FETCH:path>>> markers with fenced Python code blocks."""
+    result = []
+    for chunk in chunks:
+        content = _FETCH_MARKER_RE.sub(
+            lambda m: f"```python\n{code_map[m.group(1)].strip()}\n```" if m.group(1) in code_map else "",
+            chunk.content,
+        )
+        content = _BLANK_LINES_RE.sub("\n\n", content).strip()
+        if content:
+            result.append(
+                Chunk(
+                    source_url=chunk.source_url,
+                    chunk_index=chunk.chunk_index,
+                    heading=chunk.heading,
+                    content=content,
+                )
+            )
+    return result
 
 
 def _split_with_overlap(text: str) -> list[str]:

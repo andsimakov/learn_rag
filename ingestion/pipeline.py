@@ -13,8 +13,8 @@ from pgvector.asyncpg import register_vector
 
 from app.config import get_settings
 from app.core.embedder import embed_batch
-from ingestion.chunker import Chunk, chunk_document
-from ingestion.fetcher import fetch_fastapi_docs
+from ingestion.chunker import Chunk, chunk_document, extract_fetch_paths, substitute_code
+from ingestion.fetcher import fetch_code_files, fetch_fastapi_docs
 
 _SCHEMA_PATH = Path(__file__).parent.parent / "app" / "db" / "schema.sql"
 _UPSERT_BATCH = 100
@@ -70,6 +70,14 @@ async def run() -> None:
     for doc in docs:
         all_chunks.extend(chunk_document(doc.path, doc.content))
     print(f"Created {len(all_chunks)} chunks.")
+
+    print("Fetching code examples…")
+    code_paths = extract_fetch_paths(all_chunks)
+    print(f"  {len(code_paths)} unique Python files referenced in docs")
+    code_map = await fetch_code_files(code_paths)
+    print(f"  {len(code_map)} fetched successfully")
+    all_chunks = substitute_code(all_chunks, code_map)
+    print(f"  {len(all_chunks)} chunks after code substitution")
 
     print("Embedding…")
     texts = [c.content for c in all_chunks]
