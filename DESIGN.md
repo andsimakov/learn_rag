@@ -13,39 +13,39 @@ portfolio project demonstrating real LLM engineering practices.
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                        INGESTION PIPELINE                       │
-│   (one-shot CLI, run once to populate the vector store)         │
-│                                                                 │
-│  GitHub API ──► Fetcher ──► Chunker ──► Embedder ──► Repository │
-└─────────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────┐
+│                        INGESTION PIPELINE                          │
+│   (one-shot CLI, run once to populate the vector store)            │
+│                                                                    │
+│  GitHub API ──► Fetcher ──► Chunker ──► Embedder ──► Repository    │
+└────────────────────────────────────────────────────────────────────┘
 
-┌─────────────────────────────────────────────────────────────────┐
-│                         QUERY FLOW                              │
-│                                                                 │
-│  HTTP Request                                                   │
-│      │                                                          │
-│      ▼                                                          │
-│  [Router] ───────────────────────────────────────────────────►  │
-│      │         parse + validate (Pydantic)                      │
-│      ▼                                                          │
-│  [QueryService]                                                 │
-│      │  1. embed question        ──► [Embedder]                 │
-│      │  2. semantic search       ──► [Retriever → pgvector]     │
-│      │  3. build prompt + call   ──► [LLMClient → Anthropic]    │
-│      │  4. trace everything      ──► [LangFuse Cloud]           │
-│      ▼                                                          │
-│  [Router] ──► HTTP Response (answer + source chunks)            │
-└─────────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────┐
+│                         QUERY FLOW                                 │
+│                                                                    │
+│  HTTP Request                                                      │
+│      │                                                             │
+│      ▼                                                             │
+│  [Router] ───────────────────────────────────────────────────►     │
+│      │         parse + validate (Pydantic)                         │
+│      ▼                                                             │
+│  [QueryService]                                                    │
+│      │  1. embed question        ──► [Embedder]                    │
+│      │  2. hybrid search (BM25+vec RRF) ──► [Retriever → pgvector] │
+│      │  3. build prompt + call   ──► [LLMClient → Anthropic]       │
+│      │  4. trace everything      ──► [LangFuse Cloud]              │
+│      ▼                                                             │
+│  [Router] ──► HTTP Response (answer + source chunks)               │
+└────────────────────────────────────────────────────────────────────┘
 
-┌─────────────────────────────────────────────────────────────────┐
-│                     OFFLINE EVALUATION                          │
-│                                                                 │
-│  golden_dataset.json ──► RAG pipeline ──► LLM-as-judge          │
-│                                               │                 │
-│                                               ▼                 │
-│                                       score report (stdout)     │
-└─────────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────┐
+│                     OFFLINE EVALUATION                             │
+│                                                                    │
+│  golden_dataset.json ──► RAG pipeline ──► LLM-as-judge             │
+│                                               │                    │
+│                                               ▼                    │
+│                                       score report (stdout)        │
+└────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -122,8 +122,7 @@ learn_rag/
 │   │   └── schema.sql          # DDL: pgvector extension + documents table
 │   │
 │   └── schemas/
-│       └── query.py            # Pydantic models: QueryRequest, QueryResponse,
-│                               #   RetrievedChunk, EvalScore
+│       └── query.py            # Pydantic models: QueryRequest, QueryResponse, RetrievedChunk
 │
 ├── ingestion/
 │   ├── fetcher.py              # GitHub API → raw markdown files
@@ -132,8 +131,9 @@ learn_rag/
 │
 └── eval/
     ├── golden_dataset.json     # 15 hand-crafted Q&A pairs
-    ├── judge.py                # LLM-as-judge: faithfulness + relevance scores
-    └── run_eval.py             # CLI: runs eval loop, prints score table
+    ├── judge.py                # EvalScore model + LLM-as-judge scoring
+    ├── run_eval.py             # CLI: runs eval loop, prints score table, saves JSON
+    └── results/                # timestamped JSON score files (gitignored)
 ```
 
 ---
@@ -176,10 +176,12 @@ learn_rag/
 - Model is loaded once at startup, reused across requests
 
 ### `app/core/retriever.py`
-- `search(pool, vector, top_k) → list[RetrievedChunk]`
-- Runs pgvector cosine similarity query
-- Returns chunks sorted by relevance score
-- No embedding logic — receives a vector, returns chunks
+- `search(pool, vector, query_text, top_k) → list[RetrievedChunk]`
+- Hybrid BM25 + cosine similarity search fused via Reciprocal Rank Fusion (RRF, k=60)
+- Vector arm: `embedding <=> $1::vector` over `top_k * 5` candidates
+- FTS arm: stopword-stripped AND `tsquery` over `content_tsv`, `top_k * 3` candidates
+- Combined via `FULL OUTER JOIN` on `id`, RRF score = `1/(k+rank_v) + 1/(k+rank_f)`
+- No embedding logic — receives a pre-computed vector and raw query text
 
 ### `app/core/llm.py`
 - Thin async wrapper around `anthropic.AsyncAnthropic`
@@ -201,18 +203,17 @@ learn_rag/
 - Progress logging per batch
 
 ### `eval/judge.py`
-- `judge(question, context, answer, reference) → EvalScore`
-- Sends a structured prompt to Claude asking for JSON with:
-  - `faithfulness` (1–5): every claim grounded in context?
-  - `relevance` (1–5): answer addresses the question?
-  - `reasoning`: one-sentence explanation
-- Returns `EvalScore` Pydantic model
+- Defines `EvalScore` Pydantic model (faithfulness 1–5, relevance 1–5, reasoning)
+- `judge(question, chunks, answer, reference) → EvalScore`
+- Sends a structured prompt to Claude asking for JSON scores
+- Anthropic client is cached via `@lru_cache(maxsize=1)` — one connection pool for the full eval run
 
 ### `eval/run_eval.py`
 - CLI: `python -m eval.run_eval`
 - Loads `golden_dataset.json`
 - For each entry: run RAG pipeline → judge → collect score
 - Prints a table with per-question scores + aggregate averages
+- Persists results to `eval/results/<timestamp>.json` for regression tracking
 
 ---
 
@@ -228,46 +229,48 @@ CREATE TABLE documents (
     source_url   TEXT        NOT NULL,  -- e.g. "docs/en/tutorial/first-steps.md"
     chunk_index  INTEGER     NOT NULL,  -- position within source file
     heading      TEXT,                  -- nearest ## heading, for display
-    content      TEXT        NOT NULL,  -- raw markdown text of the chunk
+    content      TEXT        NOT NULL,  -- raw markdown text of the chunk (with inlined code)
     embedding    vector(384) NOT NULL,  -- all-MiniLM-L6-v2 output
+    content_tsv  TSVECTOR GENERATED ALWAYS AS (  -- pre-computed FTS vector
+                     setweight(to_tsvector('english', coalesce(heading, '')), 'A') ||
+                     setweight(to_tsvector('english', content), 'B')
+                 ) STORED,
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
 
     UNIQUE (source_url, chunk_index)
 );
 
-CREATE INDEX ON documents USING ivfflat (embedding vector_cosine_ops)
-    WITH (lists = 100);
+CREATE INDEX IF NOT EXISTS documents_content_tsv_idx ON documents USING GIN (content_tsv);
 ```
 
-**Why `ivfflat`?** Approximate nearest-neighbour index built into pgvector. `lists = 100` is
-appropriate for collections up to ~1M vectors; FastAPI docs produce ~2K–4K chunks so this is
-generous. Alternative `hnsw` offers better recall but higher memory — not needed at this scale.
+**No ANN index** — exact scan is correct at ~1K chunks. `ivfflat` was removed; at this corpus size
+it adds overhead with no recall benefit. Add `hnsw` if the corpus grows beyond ~50K vectors.
 
 ### Pydantic Schemas
 
 ```python
-# Request
+# app/schemas/query.py
+
 class QueryRequest(BaseModel):
     question: str
-    top_k: int = Field(default=5, ge=1, le=20)
+    top_k: int = Field(default=8, ge=1, le=20)  # default from settings
 
-# Internal transfer object (not exposed)
-class RetrievedChunk(BaseModel):
+class RetrievedChunk(BaseModel):          # internal transfer object, also in response
     content: str
     source_url: str
     heading: str | None
-    score: float          # cosine similarity 0–1
+    score: float                          # RRF score
 
-# Response
 class QueryResponse(BaseModel):
     answer: str
     sources: list[RetrievedChunk]
-    trace_id: str         # LangFuse trace ID for debugging
+    trace_id: str                         # LangFuse trace ID for debugging
 
-# Eval
-class EvalScore(BaseModel):
-    faithfulness: int     # 1–5
-    relevance: int        # 1–5
+# eval/judge.py
+
+class EvalScore(BaseModel):               # lives in eval, not app layer
+    faithfulness: int                     # 1–5
+    relevance: int                        # 1–5
     reasoning: str
 ```
 
@@ -283,7 +286,7 @@ POST /api/v1/query
 
 2. _answer() — decorated with @observe(name="rag_query"):
    a. Embedder: embed(question) → vector[384]
-   b. Retriever: search(vector, top_k=5) → chunks
+   b. Retriever: search(vector, query_text, top_k=8) → chunks  [hybrid BM25+vector RRF]
    c. Build prompt:
         system: "Answer using ONLY the provided context."
         user:   "<context>\n{chunks}\n</context>\n\nQuestion: {question}"
@@ -312,11 +315,16 @@ python -m ingestion.pipeline
    - Yield (source_path, markdown_content)
 
 2. Chunker (per file):
-   - Strip MDX include directives (`{* path/to/file.py *}`) and heading anchors (`{ #slug }`) — these are FastAPI docs build artifacts that pollute embeddings
-   - Split on ## and ### headings
-   - Each chunk = heading text + content below it
-   - If chunk > 800 chars: split further with 100-char overlap
-   - Yield (source_path, chunk_index, heading, content)
+   - Replace MDX include directives (`{* ../../docs_src/path/file.py *}`) with `<<<FETCH:path>>>` markers; strip heading anchors (`{ #slug }`)
+   - Split on #/##/### headings; each chunk = heading + body
+   - If chunk > 1500 chars: split further with 100-char overlap
+   - Yield (source_path, chunk_index, heading, content_with_markers)
+
+2a. Code substitution:
+   - Collect unique paths from `<<<FETCH:...>>>` markers across all chunks
+   - Fetch each `docs_src/**/*.py` file from raw.githubusercontent.com (semaphore-limited, errors warn and skip)
+   - Replace each marker with a fenced ```python block
+   - Drop chunks that become empty after substitution
 
 3. Embedder:
    - embed_batch(chunk_texts, batch_size=64) → vectors
@@ -422,8 +430,12 @@ select = ["E", "F", "I", "UP", "W292"]
 ```bash
 # .env.example
 
-# Database
-DATABASE_URL=postgresql://rag_user:rag_password@localhost:5432/rag_db
+# Database (assembled into DATABASE_URL via computed_field in config.py)
+POSTGRES_USER=rag_user
+POSTGRES_PASSWORD=rag_password
+POSTGRES_DB=rag_db
+POSTGRES_HOST=localhost
+POSTGRES_PORT=5432
 
 # Anthropic
 ANTHROPIC_API_KEY=sk-ant-...
@@ -436,6 +448,6 @@ LANGFUSE_BASE_URL=https://cloud.langfuse.com
 
 # App
 LOG_LEVEL=INFO
-TOP_K_DEFAULT=5
+TOP_K_DEFAULT=8
 ```
 

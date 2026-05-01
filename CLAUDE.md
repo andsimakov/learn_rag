@@ -45,9 +45,10 @@ app/
   services/        # business logic (query_service.py owns the RAG flow)
   core/            # infrastructure primitives (embedder, retriever, llm, tracing)
   db/              # asyncpg pool + schema.sql
-  schemas/         # Pydantic models
+  schemas/         # Pydantic models (QueryRequest, QueryResponse, RetrievedChunk)
 ingestion/         # one-shot CLI pipeline (fetch → chunk → embed → upsert)
 eval/              # offline evaluation (golden_dataset.json + LLM-as-judge)
+  results/         # timestamped JSON score files — gitignored
 ```
 
 ## Known gotchas
@@ -78,10 +79,17 @@ of `app/main.py` before any imports that touch LangFuse.
 LangFuse v4 uses `LANGFUSE_BASE_URL` (not `LANGFUSE_HOST`). Updated in `config.py` and `.env.example`.
 
 **Poor retrieval quality — wrong docs ranking first**
-Two causes: (1) `ivfflat` defaults to `probes=1`, searching only ~1% of vectors. Fixed by setting
-`ivfflat.probes = 10` in the asyncpg connection init. (2) FastAPI docs contain MDX directives
-(`{* path/to/file.py *}`) that pollute chunk embeddings. Fixed by stripping them in `chunker.py`.
-Re-run `make ingest` after any chunker change.
+Fixed with hybrid BM25 + cosine vector search fused via Reciprocal Rank Fusion (RRF, k=60).
+FTS uses a stopword-stripped AND query (`_fts_query()` in `retriever.py`) — generic words like
+"fastapi", "how", "handle" are stripped because they appear in questions but not doc content.
+Vector pool = `top_k * 5`, FTS pool = `top_k * 3`; final result is top-k by RRF score.
+
+**MDX code examples missing from chunks**
+FastAPI docs use `{* docs_src/path/file.py *}` directives to inline Python examples. These are now
+replaced with `<<<FETCH:path>>>` markers during chunking; `pipeline.py` fetches the actual source
+files from GitHub and substitutes them as fenced code blocks before embedding. MDX paths start with
+`../../` which is stripped to a repo-relative path before fetching. Re-run `make ingest` after any
+chunker change.
 
 ## Architecture rules
 
