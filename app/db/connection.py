@@ -20,9 +20,6 @@ async def create_pool() -> asyncpg.Pool:
 
 async def _init_connection(conn: asyncpg.Connection) -> None:
     await register_vector(conn)
-    # Probe more ivfflat clusters per query for better recall.
-    # Default probes=1 searches ~1% of vectors — too lossy for a small corpus.
-    await conn.execute("SET ivfflat.probes = 10")
 
 
 async def close_pool() -> None:

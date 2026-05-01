@@ -12,9 +12,6 @@ CREATE TABLE IF NOT EXISTS documents (
     UNIQUE (source_url, chunk_index)
 );
 
--- ivfflat: approximate nearest-neighbour; lists=100 suits collections up to ~1M vectors.
--- FastAPI docs produce ~2K-4K chunks, so this is more than sufficient.
-CREATE INDEX IF NOT EXISTS documents_embedding_idx
-    ON documents
-    USING ivfflat (embedding vector_cosine_ops)
-    WITH (lists = 100);
+-- No ivfflat index: exact sequential scan is fast enough at ≤10K vectors and avoids
+-- the recall penalty of misconfigured list counts. Add ivfflat (lists ≈ sqrt(n))
+-- once the corpus exceeds ~10K chunks.
