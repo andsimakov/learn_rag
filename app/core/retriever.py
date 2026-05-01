@@ -75,7 +75,10 @@ async def search(
 
     rows = await pool.fetch(
         """
-        WITH vector_ranked AS (
+        WITH fts_query AS (
+            SELECT CASE WHEN $2::text IS NOT NULL THEN to_tsquery('english', $2::text) END AS q
+        ),
+        vector_ranked AS (
             SELECT id, ROW_NUMBER() OVER (ORDER BY embedding <=> $1::vector) AS rank
             FROM documents
             ORDER BY embedding <=> $1::vector
@@ -84,12 +87,12 @@ async def search(
         fts_ranked AS (
             SELECT d.id,
                    ROW_NUMBER() OVER (
-                       ORDER BY ts_rank_cd(d.content_tsv, to_tsquery('english', $2)) DESC
+                       ORDER BY ts_rank_cd(d.content_tsv, fts_query.q) DESC
                    ) AS rank
-            FROM documents d
-            WHERE $2::text IS NOT NULL
-              AND d.content_tsv @@ to_tsquery('english', $2::text)
-            ORDER BY ts_rank_cd(d.content_tsv, to_tsquery('english', $2::text)) DESC
+            FROM documents d, fts_query
+            WHERE fts_query.q IS NOT NULL
+              AND d.content_tsv @@ fts_query.q
+            ORDER BY ts_rank_cd(d.content_tsv, fts_query.q) DESC
             LIMIT $4
         ),
         combined AS (

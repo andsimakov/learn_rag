@@ -19,6 +19,9 @@ dist/
 # (sentence-transformers pulls models here if HF_HOME is not set)
 .cache/
 
+# Eval run artefacts — tracked manually, not in git
+eval/results/
+
 # IDE
 .idea/
 .vscode/

@@ -19,9 +19,3 @@ class QueryResponse(BaseModel):
     answer: str
     sources: list[RetrievedChunk]
     trace_id: str
-
-
-class EvalScore(BaseModel):
-    faithfulness: int = Field(ge=1, le=5)
-    relevance: int = Field(ge=1, le=5)
-    reasoning: str

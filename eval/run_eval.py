@@ -15,6 +15,7 @@ import asyncio  # noqa: E402
 import json  # noqa: E402
 import os  # noqa: E402
 import sys  # noqa: E402
+from datetime import UTC, datetime  # noqa: E402
 from pathlib import Path  # noqa: E402
 
 from langfuse import get_client  # noqa: E402
@@ -25,6 +26,7 @@ from app.services.query_service import QueryService  # noqa: E402
 from eval.judge import judge  # noqa: E402
 
 _DATASET_PATH = Path(__file__).parent / "golden_dataset.json"
+_RESULTS_DIR = Path(__file__).parent / "results"
 _COL_W = 55  # truncation width for question column in report
 
 
@@ -64,6 +66,12 @@ async def run() -> None:
     avg_f = sum(r["faithfulness"] for r in results) / len(results)
     avg_r = sum(r["relevance"] for r in results) / len(results)
     print(f"Average  —  Faithfulness: {avg_f:.1f}/5   Relevance: {avg_r:.1f}/5")
+
+    _RESULTS_DIR.mkdir(exist_ok=True)
+    ts = datetime.now(UTC).strftime("%Y-%m-%dT%H-%M-%SZ")
+    out_path = _RESULTS_DIR / f"{ts}.json"
+    out_path.write_text(json.dumps({"avg_faithfulness": avg_f, "avg_relevance": avg_r, "results": results}, indent=2))
+    print(f"Results saved → {out_path}")
 
     get_client().flush()
     await close_pool()

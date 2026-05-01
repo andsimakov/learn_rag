@@ -3,9 +3,16 @@ import re
 from functools import lru_cache
 
 import anthropic
+from pydantic import BaseModel, Field
 
 from app.config import get_settings
-from app.schemas.query import EvalScore, RetrievedChunk
+from app.schemas.query import RetrievedChunk
+
+
+class EvalScore(BaseModel):
+    faithfulness: int = Field(ge=1, le=5)
+    relevance: int = Field(ge=1, le=5)
+    reasoning: str
 
 
 @lru_cache(maxsize=1)
