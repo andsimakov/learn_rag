@@ -21,7 +21,7 @@ async def _answer(request: QueryRequest) -> QueryResponse:
     pool = get_pool()
 
     vector = await embedder.embed(request.question)
-    chunks = await retriever.search(pool, vector, request.top_k)
+    chunks = await retriever.search(pool, vector, request.question, request.top_k)
     answer_text = await generate(
         question=request.question,
         chunks=chunks,

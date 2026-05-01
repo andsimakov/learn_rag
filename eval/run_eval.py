@@ -14,6 +14,7 @@ load_dotenv()
 import asyncio  # noqa: E402
 import json  # noqa: E402
 import os  # noqa: E402
+import sys  # noqa: E402
 from pathlib import Path  # noqa: E402
 
 from langfuse import get_client  # noqa: E402
@@ -69,7 +70,15 @@ async def run() -> None:
 
 
 if __name__ == "__main__":
+    _exit_code = 0
     try:
         asyncio.run(run())
+    except Exception:
+        import traceback
+
+        traceback.print_exc()
+        _exit_code = 1
     finally:
-        os._exit(0)  # skip LangFuse/multiprocessing atexit handlers — already flushed above
+        sys.stdout.flush()
+        sys.stderr.flush()
+        os._exit(_exit_code)  # skip LangFuse/multiprocessing atexit handlers — already flushed above
