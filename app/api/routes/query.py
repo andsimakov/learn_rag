@@ -1,9 +1,12 @@
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.api.deps import get_query_service
 from app.schemas.query import QueryRequest, QueryResponse
 from app.services.query_service import QueryService
 
+log = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -15,4 +18,5 @@ async def query(
     try:
         return await service.answer(request)
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        log.exception("Query failed")
+        raise HTTPException(status_code=500, detail="Internal server error") from exc

@@ -1,10 +1,17 @@
 import json
 import re
+from functools import lru_cache
 
 import anthropic
 
 from app.config import get_settings
 from app.schemas.query import EvalScore, RetrievedChunk
+
+
+@lru_cache(maxsize=1)
+def _get_client() -> anthropic.AsyncAnthropic:
+    return anthropic.AsyncAnthropic(api_key=get_settings().anthropic_api_key)
+
 
 _JUDGE_PROMPT = """\
 You are evaluating a RAG (Retrieval-Augmented Generation) system answer.
@@ -40,7 +47,7 @@ async def judge(
 ) -> EvalScore:
     """Use Claude as a judge to score a RAG answer on faithfulness and relevance."""
     settings = get_settings()
-    client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+    client = _get_client()
 
     context = "\n\n---\n\n".join(f"[{chunk.source_url}]\n{chunk.content}" for chunk in chunks)
 

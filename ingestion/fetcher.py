@@ -82,7 +82,15 @@ async def fetch_fastapi_docs() -> list[DocFile]:
 
         print(f"Found {len(paths)} markdown files")
 
-        tasks = [_download(client, path) for path in paths]
-        docs = await asyncio.gather(*tasks)
+        results = await asyncio.gather(
+            *[_download(client, path) for path in paths],
+            return_exceptions=True,
+        )
 
-    return list(docs)
+    docs: list[DocFile] = []
+    for path, result in zip(paths, results):
+        if isinstance(result, Exception):
+            print(f"  Warning: could not fetch {path}: {result}")
+        else:
+            docs.append(result)
+    return docs

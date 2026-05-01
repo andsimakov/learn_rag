@@ -22,6 +22,8 @@ async def _answer(request: QueryRequest) -> QueryResponse:
 
     vector = await embedder.embed(request.question)
     chunks = await retriever.search(pool, vector, request.question, request.top_k)
+    if not chunks:
+        return QueryResponse(answer="No relevant documentation found.", sources=[], trace_id="")
     answer_text = await generate(
         question=request.question,
         chunks=chunks,

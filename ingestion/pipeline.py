@@ -61,38 +61,40 @@ async def run() -> None:
         init=lambda conn: register_vector(conn),
     )
 
-    print("Fetching FastAPI docs from GitHub…")
-    docs = await fetch_fastapi_docs()
-    print(f"Downloaded {len(docs)} files.")
+    try:
+        print("Fetching FastAPI docs from GitHub…")
+        docs = await fetch_fastapi_docs()
+        print(f"Downloaded {len(docs)} files.")
 
-    print("Chunking…")
-    all_chunks: list[Chunk] = []
-    for doc in docs:
-        all_chunks.extend(chunk_document(doc.path, doc.content))
-    print(f"Created {len(all_chunks)} chunks.")
+        print("Chunking…")
+        all_chunks: list[Chunk] = []
+        for doc in docs:
+            all_chunks.extend(chunk_document(doc.path, doc.content))
+        print(f"Created {len(all_chunks)} chunks.")
 
-    print("Fetching code examples…")
-    code_paths = extract_fetch_paths(all_chunks)
-    print(f"  {len(code_paths)} unique Python files referenced in docs")
-    code_map = await fetch_code_files(code_paths)
-    print(f"  {len(code_map)} fetched successfully")
-    all_chunks = substitute_code(all_chunks, code_map)
-    print(f"  {len(all_chunks)} chunks after code substitution")
+        print("Fetching code examples…")
+        code_paths = extract_fetch_paths(all_chunks)
+        print(f"  {len(code_paths)} unique Python files referenced in docs")
+        code_map = await fetch_code_files(code_paths)
+        print(f"  {len(code_map)} fetched successfully")
+        all_chunks = substitute_code(all_chunks, code_map)
+        print(f"  {len(all_chunks)} chunks after code substitution")
 
-    print("Embedding…")
-    texts = [c.content for c in all_chunks]
-    vectors = await embed_batch(texts)
-    print(f"Embedded {len(vectors)} vectors.")
+        print("Embedding…")
+        texts = [c.content for c in all_chunks]
+        vectors = await embed_batch(texts)
+        print(f"Embedded {len(vectors)} vectors.")
 
-    print("Upserting to database…")
-    for i in range(0, len(all_chunks), _UPSERT_BATCH):
-        batch_chunks = all_chunks[i : i + _UPSERT_BATCH]
-        batch_vectors = vectors[i : i + _UPSERT_BATCH]
-        await _upsert_batch(pool, batch_chunks, batch_vectors)
-        done = min(i + _UPSERT_BATCH, len(all_chunks))
-        print(f"  {done}/{len(all_chunks)}")
+        print("Upserting to database…")
+        for i in range(0, len(all_chunks), _UPSERT_BATCH):
+            batch_chunks = all_chunks[i : i + _UPSERT_BATCH]
+            batch_vectors = vectors[i : i + _UPSERT_BATCH]
+            await _upsert_batch(pool, batch_chunks, batch_vectors)
+            done = min(i + _UPSERT_BATCH, len(all_chunks))
+            print(f"  {done}/{len(all_chunks)}")
+    finally:
+        await pool.close()
 
-    await pool.close()
     print("Pipeline complete.")
 
 
