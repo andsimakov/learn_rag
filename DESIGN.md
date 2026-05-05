@@ -29,7 +29,7 @@ portfolio project demonstrating real LLM engineering practices.
 │  [Router] ───────────────────────────────────────────────────►     │
 │      │         parse + validate (Pydantic)                         │
 │      ▼                                                             │
-│  [QueryService]                                                    │
+│  [answer()]                                                        │
 │      │  1. embed question        ──► [Embedder]                    │
 │      │  2. hybrid search (BM25+vec RRF) ──► [Retriever → pgvector] │
 │      │  3. build prompt + call   ──► [LLMClient → Anthropic]       │
@@ -103,7 +103,6 @@ learn_rag/
 │   ├── config.py               # pydantic-settings: all env vars in one place
 │   │
 │   ├── api/
-│   │   ├── deps.py             # FastAPI Depends() providers
 │   │   └── routes/
 │   │       ├── query.py        # POST /query  (router only)
 │   │       └── health.py       # GET  /health
@@ -152,22 +151,17 @@ learn_rag/
 - Accessed as a singleton via `get_settings()` (lru_cache)
 - All secrets and tunable knobs live here
 
-### `app/api/deps.py`
-- FastAPI `Depends()` providers
-- Provides `QueryService`, `Embedder`, DB pool to routes
-- Keeps routes free of construction logic
-
 ### `app/api/routes/query.py`
 - Accepts `POST /api/v1/query` with `QueryRequest`
-- Calls `QueryService.answer()`
+- Calls `answer()` from `query_service` directly — no `Depends()` indirection needed for a stateless function
 - Returns `QueryResponse`
 - Handles HTTP-level errors (422, 500)
 
 ### `app/services/query_service.py`
-- `QueryService.answer()` delegates to the module-level `_answer()` function
-- `@observe` must wrap a module-level function — it does not propagate trace context correctly on class instance methods in LangFuse v4
-- `_answer()` owns the RAG prompt template and assembles the full flow: embed → retrieve → generate
-- LangFuse tracing via `@observe(name="rag_query")` on `_answer()` and `get_client()` for I/O metadata
+- Exposes a module-level `answer(request)` function — no class wrapper
+- `@observe` must wrap a module-level function; LangFuse v4 does not propagate trace context correctly on instance methods
+- `answer()` owns the RAG prompt template and assembles the full flow: embed → retrieve → generate
+- LangFuse tracing via `@observe(name="rag_query")` and `get_client()` for I/O metadata
 
 ### `app/core/embedder.py`
 - Wraps `sentence-transformers` `all-MiniLM-L6-v2`
@@ -282,9 +276,9 @@ class EvalScore(BaseModel):               # lives in eval, not app layer
 POST /api/v1/query
   {"question": "How do I declare path parameters?", "top_k": 5}
 
-1. Router validates request (Pydantic) → calls QueryService.answer()
+1. Router validates request (Pydantic) → calls answer()
 
-2. _answer() — decorated with @observe(name="rag_query"):
+2. answer() — decorated with @observe(name="rag_query"):
    a. Embedder: embed(question) → vector[384]
    b. Retriever: search(vector, query_text, top_k=8) → chunks  [hybrid BM25+vector RRF]
    c. Build prompt:
@@ -342,7 +336,7 @@ python -m ingestion.pipeline
 Every query produces one trace with a nested generation:
 
 ```
-trace: rag_query              (@observe on _answer() — sets input/output via get_client())
+trace: rag_query              (@observe on answer() — sets input/output via get_client())
   └── generation: llm_call    (@observe(as_type="generation") on generate() — model, tokens, cost)
 ```
 
@@ -449,5 +443,6 @@ LANGFUSE_BASE_URL=https://cloud.langfuse.com
 # App
 LOG_LEVEL=INFO
 TOP_K_DEFAULT=8
+MAX_TOKENS=1024
 ```
 

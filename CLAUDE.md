@@ -68,7 +68,8 @@ In v4, `observe` and `get_client` moved to the top-level package:
 
 **`@observe` on a class method — `trace_id` is empty**
 LangFuse v4's `@observe` doesn't propagate trace context correctly on instance methods.
-Decorate a module-level function instead; the class method can delegate to it.
+Decorate a module-level function instead. `QueryService` was removed entirely once we confirmed
+the wrapper class added nothing but indirection — `query_service.py` now exposes `answer()` directly.
 
 **LangFuse `get_client()` ignores `.env` file**
 `pydantic-settings` reads `.env` into the `Settings` object but does not write to `os.environ`.

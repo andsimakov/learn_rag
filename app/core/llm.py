@@ -41,7 +41,7 @@ async def generate(
 
     response = await client.messages.create(
         model=settings.anthropic_model,
-        max_tokens=1024,
+        max_tokens=settings.max_tokens,
         system=system_prompt,
         messages=messages,
     )

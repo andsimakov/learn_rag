@@ -22,7 +22,7 @@ from langfuse import get_client  # noqa: E402
 
 from app.db.connection import close_pool, create_pool  # noqa: E402
 from app.schemas.query import QueryRequest  # noqa: E402
-from app.services.query_service import QueryService  # noqa: E402
+from app.services.query_service import answer  # noqa: E402
 from eval.judge import judge  # noqa: E402
 
 _DATASET_PATH = Path(__file__).parent / "golden_dataset.json"
@@ -34,7 +34,6 @@ async def run() -> None:
     dataset = json.loads(_DATASET_PATH.read_text())
 
     await create_pool()
-    service = QueryService()
 
     results = []
     print(f"\nEvaluating {len(dataset)} questions…\n")
@@ -46,7 +45,7 @@ async def run() -> None:
         q_display = question[:_COL_W] + "…" if len(question) > _COL_W else question
         print(f"[{i + 1}/{len(dataset)}] {q_display}", flush=True)
 
-        response = await service.answer(QueryRequest(question=question))
+        response = await answer(QueryRequest(question=question))
         score = await judge(question, response.sources, response.answer, reference)
 
         results.append(

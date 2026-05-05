@@ -14,7 +14,7 @@ _SYSTEM_PROMPT = (
 
 
 @observe(name="rag_query")
-async def _answer(request: QueryRequest) -> QueryResponse:
+async def answer(request: QueryRequest) -> QueryResponse:
     lf = get_client()
     lf.set_current_trace_io(input={"question": request.question, "top_k": request.top_k})
 
@@ -34,8 +34,3 @@ async def _answer(request: QueryRequest) -> QueryResponse:
     lf.set_current_trace_io(output={"answer": answer_text})
 
     return QueryResponse(answer=answer_text, sources=chunks, trace_id=trace_id)
-
-
-class QueryService:
-    async def answer(self, request: QueryRequest) -> QueryResponse:
-        return await _answer(request)

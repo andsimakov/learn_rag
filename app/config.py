@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     # App
     log_level: str = "INFO"
     top_k_default: int = 8
+    max_tokens: int = 1024
 
 
 @lru_cache
