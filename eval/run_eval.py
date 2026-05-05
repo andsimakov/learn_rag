@@ -35,45 +35,48 @@ async def run() -> None:
 
     await create_pool()
 
-    results = []
-    print(f"\nEvaluating {len(dataset)} questions…\n")
+    try:
+        results = []
+        print(f"\nEvaluating {len(dataset)} questions…\n")
 
-    for i, entry in enumerate(dataset):
-        question: str = entry["question"]
-        reference: str = entry["reference_answer"]
+        for i, entry in enumerate(dataset):
+            question: str = entry["question"]
+            reference: str = entry["reference_answer"]
 
-        q_display = question[:_COL_W] + "…" if len(question) > _COL_W else question
-        print(f"[{i + 1}/{len(dataset)}] {q_display}", flush=True)
+            q_display = question[:_COL_W] + "…" if len(question) > _COL_W else question
+            print(f"[{i + 1}/{len(dataset)}] {q_display}", flush=True)
 
-        response = await answer(QueryRequest(question=question))
-        score = await judge(question, response.sources, response.answer, reference)
+            response = await answer(QueryRequest(question=question))
+            score = await judge(question, response.sources, response.answer, reference)
 
-        results.append(
-            {
-                "question": question,
-                "faithfulness": score.faithfulness,
-                "relevance": score.relevance,
-                "reasoning": score.reasoning,
-            }
+            results.append(
+                {
+                    "question": question,
+                    "faithfulness": score.faithfulness,
+                    "relevance": score.relevance,
+                    "reasoning": score.reasoning,
+                }
+            )
+
+            print(f"   Faithfulness {score.faithfulness}/5  Relevance {score.relevance}/5")
+            print(f"   {score.reasoning}\n")
+
+        sep = "─" * (_COL_W + 30)
+        print(sep)
+        avg_f = sum(r["faithfulness"] for r in results) / len(results)
+        avg_r = sum(r["relevance"] for r in results) / len(results)
+        print(f"Average  —  Faithfulness: {avg_f:.1f}/5   Relevance: {avg_r:.1f}/5")
+
+        _RESULTS_DIR.mkdir(exist_ok=True)
+        ts = datetime.now(UTC).strftime("%Y-%m-%dT%H-%M-%SZ")
+        out_path = _RESULTS_DIR / f"{ts}.json"
+        out_path.write_text(
+            json.dumps({"avg_faithfulness": avg_f, "avg_relevance": avg_r, "results": results}, indent=2)
         )
-
-        print(f"   Faithfulness {score.faithfulness}/5  Relevance {score.relevance}/5")
-        print(f"   {score.reasoning}\n")
-
-    sep = "─" * (_COL_W + 30)
-    print(sep)
-    avg_f = sum(r["faithfulness"] for r in results) / len(results)
-    avg_r = sum(r["relevance"] for r in results) / len(results)
-    print(f"Average  —  Faithfulness: {avg_f:.1f}/5   Relevance: {avg_r:.1f}/5")
-
-    _RESULTS_DIR.mkdir(exist_ok=True)
-    ts = datetime.now(UTC).strftime("%Y-%m-%dT%H-%M-%SZ")
-    out_path = _RESULTS_DIR / f"{ts}.json"
-    out_path.write_text(json.dumps({"avg_faithfulness": avg_f, "avg_relevance": avg_r, "results": results}, indent=2))
-    print(f"Results saved → {out_path}")
-
-    get_client().flush()
-    await close_pool()
+        print(f"Results saved → {out_path}")
+    finally:
+        get_client().flush()
+        await close_pool()
 
 
 if __name__ == "__main__":

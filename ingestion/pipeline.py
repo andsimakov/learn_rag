@@ -50,8 +50,10 @@ async def run() -> None:
     # Apply schema first via a plain connection — the vector extension must exist
     # before register_vector() can be used in the pool init callback.
     conn = await asyncpg.connect(dsn=settings.database_url)
-    await _apply_schema(conn)
-    await conn.close()
+    try:
+        await _apply_schema(conn)
+    finally:
+        await conn.close()
     print("Schema applied.")
 
     pool = await asyncpg.create_pool(

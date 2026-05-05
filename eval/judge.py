@@ -60,7 +60,7 @@ async def judge(
 
     response = await client.messages.create(
         model=settings.anthropic_model,
-        max_tokens=256,
+        max_tokens=256,  # tight budget — response is JSON only, ~50 tokens in practice
         messages=[
             {
                 "role": "user",
