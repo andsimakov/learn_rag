@@ -128,11 +128,19 @@ def substitute_code(chunks: list[Chunk], code_map: dict[str, str]) -> list[Chunk
 
 
 def _split_with_overlap(text: str) -> list[str]:
-    """Slide a window of _MAX_CHARS over text with _OVERLAP carry-over."""
+    """Slide a window of _MAX_CHARS over text with _OVERLAP carry-over.
+
+    Cuts at the nearest preceding newline to avoid breaking mid-word.
+    Falls back to a hard cut only when the window contains no newline.
+    """
     parts: list[str] = []
     start = 0
     while start < len(text):
         end = start + _MAX_CHARS
+        if end < len(text):
+            nl = text.rfind("\n", start, end)
+            if nl > start:
+                end = nl + 1
         parts.append(text[start:end])
         if end >= len(text):
             break
