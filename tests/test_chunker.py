@@ -1,6 +1,5 @@
 from ingestion.chunker import (
     _MAX_CHARS,
-    _OVERLAP,
     Chunk,
     _split_with_overlap,
     chunk_document,
@@ -91,8 +90,5 @@ def test_split_with_overlap_no_infinite_loop_when_newline_near_start():
     line_b = "y" * 1600  # long line, no newline, pushes total > _MAX_CHARS
     text = line_a + line_b
     parts = _split_with_overlap(text)
-    # Must terminate and cover the full text
-    assert "".join(parts)  # non-empty
-    reconstructed = parts[0]
-    for part in parts[1:]:
-        reconstructed += part[-(len(part) - _OVERLAP) :]  # rough check, just no hang
+    assert all(len(p) > 0 for p in parts)
+    assert sum(len(p) for p in parts) >= len(text)  # overlap means sum >= original

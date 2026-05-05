@@ -15,12 +15,12 @@ def _mock_embedder(mocker, dim: int):
     mocker.patch("app.core.embedder.get_settings", return_value=mock_settings)
 
 
-def test_warm_up_passes_with_correct_dim(mocker):
+async def test_warm_up_passes_with_correct_dim(mocker):
     _mock_embedder(mocker, dim=384)
-    warm_up()  # should not raise
+    await warm_up()  # should not raise
 
 
-def test_warm_up_raises_on_wrong_dim(mocker):
+async def test_warm_up_raises_on_wrong_dim(mocker):
     _mock_embedder(mocker, dim=768)
     with pytest.raises(ValueError, match="768"):
-        warm_up()
+        await warm_up()

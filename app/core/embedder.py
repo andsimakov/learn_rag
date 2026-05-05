@@ -13,11 +13,12 @@ def _load_model() -> SentenceTransformer:
     return SentenceTransformer(settings.embedding_model)
 
 
-def warm_up() -> None:
+async def warm_up() -> None:
     """Pre-load the model and assert its output dim matches settings.embedding_dim."""
     model = _load_model()
     settings = get_settings()
-    probe: np.ndarray = model.encode("probe")
+    loop = asyncio.get_running_loop()
+    probe: np.ndarray = await loop.run_in_executor(None, model.encode, "probe")
     actual = probe.shape[0]
     if actual != settings.embedding_dim:
         raise ValueError(

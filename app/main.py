@@ -19,7 +19,7 @@ from app.db.connection import close_pool, create_pool  # noqa: E402
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     await create_pool()
-    warm_up()
+    await warm_up()
     yield
     await close_pool()
 
