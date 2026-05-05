@@ -419,6 +419,25 @@ select = ["E", "F", "I", "UP", "W292"]
 
 ---
 
+## Adapting to a New Domain
+
+The RAG pipeline is domain-agnostic. Only three things are FastAPI-specific:
+
+| What to change | Where | Notes |
+|---|---|---|
+| Document source | `ingestion/fetcher.py` | Replace GitHub fetcher with any source — S3, local files, a web crawler, a PDF parser. The chunker and pipeline are format-agnostic. |
+| System prompt | `app/services/query_service.py` | One string: `_SYSTEM_PROMPT`. Update to describe the new knowledge domain. |
+| Golden dataset | `eval/golden_dataset.json` | Write new Q&A pairs for the new domain. The judge logic in `eval/judge.py` is reusable as-is. |
+
+Everything else — chunking, hybrid BM25+vector search, RRF fusion, the LLM call, tracing, the API layer — is fully generic.
+
+**Embedding model caveat:** `all-MiniLM-L6-v2` is fast and lightweight but not the strongest retriever.
+For domains with specialised vocabulary (legal, medical, non-English) evaluate whether a larger or
+domain-specific model improves recall before going to production. The model is a one-line change in
+`.env` (`EMBEDDING_MODEL=...`); re-run `make ingest` after switching.
+
+---
+
 ## Environment Variables
 
 ```bash
