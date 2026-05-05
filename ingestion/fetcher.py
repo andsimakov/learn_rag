@@ -5,7 +5,6 @@ import httpx
 
 _REPO = "fastapi/fastapi"
 _BRANCH = "master"
-_DOCS_ROOT = "docs/en/docs/"
 _RAW_BASE = f"https://raw.githubusercontent.com/{_REPO}/{_BRANCH}"
 _TREE_URL = f"https://api.github.com/repos/{_REPO}/git/trees/{_BRANCH}"
 

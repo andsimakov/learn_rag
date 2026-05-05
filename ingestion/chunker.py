@@ -144,5 +144,5 @@ def _split_with_overlap(text: str) -> list[str]:
         parts.append(text[start:end])
         if end >= len(text):
             break
-        start = end - _OVERLAP
+        start = max(end - _OVERLAP, start + 1)  # guarantee forward progress
     return parts

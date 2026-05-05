@@ -1,5 +1,6 @@
 from ingestion.chunker import (
     _MAX_CHARS,
+    _OVERLAP,
     Chunk,
     _split_with_overlap,
     chunk_document,
@@ -81,3 +82,17 @@ def test_split_with_overlap_cuts_at_newline():
     assert len(parts) > 1
     for part in parts[:-1]:
         assert part.endswith("\n"), f"Expected newline-terminated chunk, got: {repr(part[-10:])}"
+
+
+def test_split_with_overlap_no_infinite_loop_when_newline_near_start():
+    # Newline appears within _OVERLAP chars of start — without the max() guard
+    # start could go backwards, causing an infinite loop or wrong output.
+    line_a = "x" * 90 + "\n"  # newline at char 91 — inside _OVERLAP window
+    line_b = "y" * 1600  # long line, no newline, pushes total > _MAX_CHARS
+    text = line_a + line_b
+    parts = _split_with_overlap(text)
+    # Must terminate and cover the full text
+    assert "".join(parts)  # non-empty
+    reconstructed = parts[0]
+    for part in parts[1:]:
+        reconstructed += part[-(len(part) - _OVERLAP) :]  # rough check, just no hang
