@@ -14,8 +14,17 @@ def _load_model() -> SentenceTransformer:
 
 
 def warm_up() -> None:
-    """Pre-load the model at startup so the first request isn't slow."""
-    _load_model()
+    """Pre-load the model and assert its output dim matches settings.embedding_dim."""
+    model = _load_model()
+    settings = get_settings()
+    probe: np.ndarray = model.encode("probe")
+    actual = probe.shape[0]
+    if actual != settings.embedding_dim:
+        raise ValueError(
+            f"Model '{settings.embedding_model}' produces {actual}-dim vectors "
+            f"but embedding_dim={settings.embedding_dim}. "
+            "Update EMBEDDING_DIM in .env or switch to the correct model."
+        )
 
 
 async def embed(text: str) -> np.ndarray:
