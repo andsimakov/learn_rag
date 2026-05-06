@@ -36,6 +36,7 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     top_k_default: int = 8
     max_tokens: int = 1024
+    allowed_origins: list[str] = ["*"]
 
 
 @lru_cache

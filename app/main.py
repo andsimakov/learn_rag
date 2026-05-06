@@ -13,6 +13,7 @@ from fastapi import FastAPI  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 
 from app.api.routes import health, query  # noqa: E402
+from app.config import get_settings  # noqa: E402
 from app.core.embedder import warm_up  # noqa: E402
 from app.db.connection import close_pool, create_pool  # noqa: E402
 
@@ -33,7 +34,7 @@ def create_app() -> FastAPI:
     )
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=get_settings().allowed_origins,
         allow_methods=["*"],
         allow_headers=["*"],
     )
