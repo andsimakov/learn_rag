@@ -10,7 +10,8 @@ RAG-powered Q&A over FastAPI documentation. See `DESIGN.md` for full architectur
 * sentence-transformers (`all-MiniLM-L6-v2`)
 * Anthropic (`claude-sonnet-4-6`)
 * LangFuse Cloud
-* asyncpg.
+* asyncpg
+* React 19 + Next.js 16 + Tailwind v4 (client/)
 
 ## Setup
 
@@ -20,12 +21,16 @@ make install           # install deps + set up pre-commit hooks
 make db-up             # start PostgreSQL with pgvector
 make ingest            # fetch FastAPI docs → chunk → embed → store (run once)
 make dev               # start API at http://localhost:8000
+make client-install    # install frontend npm dependencies (first time only)
+make client            # start frontend at http://localhost:3000
 ```
 
 ## Common commands
 
 ```bash
 make dev               # start API server with hot-reload
+make client            # start frontend dev server (http://localhost:3000)
+make client-install    # install frontend npm dependencies
 make ingest            # re-run ingestion pipeline (idempotent)
 make eval              # run offline LLM-as-judge evaluation
 make lint              # ruff check
@@ -49,6 +54,12 @@ app/
 ingestion/         # one-shot CLI pipeline (fetch → chunk → embed → upsert)
 eval/              # offline evaluation (golden_dataset.json + LLM-as-judge)
   results/         # timestamped JSON score files — gitignored
+client/            # Next.js 16 chat frontend
+  src/
+    app/           # Next.js App Router (page.tsx, layout.tsx)
+    components/    # ChatInput, MessageList, MessageItem, SourcesList
+    lib/api.ts     # fetch-based SSE client (async generator)
+    types/api.ts   # TypeScript interfaces matching backend schemas
 ```
 
 ## Known gotchas
@@ -70,6 +81,11 @@ In v4, `observe` and `get_client` moved to the top-level package:
 LangFuse v4's `@observe` doesn't propagate trace context correctly on instance methods.
 Decorate a module-level function instead. `QueryService` was removed entirely once we confirmed
 the wrapper class added nothing but indirection — `query_service.py` now exposes `answer()` directly.
+
+**`@observe` cannot decorate async generators**
+LangFuse's `@observe` decorator does not support async generator functions. For the streaming path,
+create a trace manually: `trace = get_client().trace(name=..., input=...)`, accumulate the full
+answer, then call `trace.update(output=...)` and yield `trace.id` in the `done` event.
 
 **LangFuse `get_client()` ignores `.env` file**
 `pydantic-settings` reads `.env` into the `Settings` object but does not write to `os.environ`.

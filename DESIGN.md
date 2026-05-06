@@ -23,19 +23,19 @@ portfolio project demonstrating real LLM engineering practices.
 ┌────────────────────────────────────────────────────────────────────┐
 │                         QUERY FLOW                                 │
 │                                                                    │
-│  HTTP Request                                                      │
-│      │                                                             │
+│  Browser (Next.js client)                                          │
+│      │  POST /api/v1/query/stream  (SSE)                           │
 │      ▼                                                             │
-│  [Router] ───────────────────────────────────────────────────►     │
-│      │         parse + validate (Pydantic)                         │
+│  [Router] ── parse + validate (Pydantic) ──────────────────────►   │
 │      ▼                                                             │
-│  [answer()]                                                        │
+│  [stream_answer()]                                                 │
 │      │  1. embed question        ──► [Embedder]                    │
 │      │  2. hybrid search (BM25+vec RRF) ──► [Retriever → pgvector] │
-│      │  3. build prompt + call   ──► [LLMClient → Anthropic]       │
-│      │  4. trace everything      ──► [LangFuse Cloud]              │
+│      │  3. yield sources event                                     │
+│      │  4. stream tokens         ──► [stream_generate → Anthropic] │
+│      │  5. trace manually        ──► [LangFuse Cloud]              │
 │      ▼                                                             │
-│  [Router] ──► HTTP Response (answer + source chunks)               │
+│  [Router] ──► SSE stream  (sources → tokens → done)                │
 └────────────────────────────────────────────────────────────────────┘
 
 ┌────────────────────────────────────────────────────────────────────┐
@@ -99,21 +99,21 @@ learn_rag/
 ├── .env.example                # required env vars documented
 │
 ├── app/                        # FastAPI service
-│   ├── main.py                 # app factory, lifespan, router registration
+│   ├── main.py                 # app factory, lifespan, CORS, router registration
 │   ├── config.py               # pydantic-settings: all env vars in one place
 │   │
 │   ├── api/
 │   │   └── routes/
-│   │       ├── query.py        # POST /query  (router only)
+│   │       ├── query.py        # POST /query (batch) + POST /query/stream (SSE)
 │   │       └── health.py       # GET  /health
 │   │
 │   ├── services/
-│   │   └── query_service.py    # orchestrates embed → retrieve → generate → trace
+│   │   └── query_service.py    # answer() + stream_answer() — embed → retrieve → generate → trace
 │   │
 │   ├── core/
 │   │   ├── embedder.py         # sentence-transformers wrapper (async-safe)
-│   │   ├── retriever.py        # pgvector ANN search queries
-│   │   ├── llm.py              # Anthropic async client + LangFuse generation tracing
+│   │   ├── retriever.py        # hybrid BM25+vector RRF search
+│   │   ├── llm.py              # generate(), stream_generate(), LLMOverloadedError
 │   │   └── tracing.py          # LangFuse v4 usage reference (decorator pattern)
 │   │
 │   ├── db/
@@ -128,11 +128,18 @@ learn_rag/
 │   ├── chunker.py              # section-aware markdown splitter
 │   └── pipeline.py             # CLI entrypoint: fetch → chunk → embed → upsert
 │
-└── eval/
-    ├── golden_dataset.json     # 15 hand-crafted Q&A pairs
-    ├── judge.py                # EvalScore model + LLM-as-judge scoring
-    ├── run_eval.py             # CLI: runs eval loop, prints score table, saves JSON
-    └── results/                # timestamped JSON score files (gitignored)
+├── eval/
+│   ├── golden_dataset.json     # 15 hand-crafted Q&A pairs
+│   ├── judge.py                # EvalScore model + LLM-as-judge scoring
+│   ├── run_eval.py             # CLI: runs eval loop, prints score table, saves JSON
+│   └── results/                # timestamped JSON score files (gitignored)
+│
+└── client/                     # Next.js 16 chat frontend
+    └── src/
+        ├── app/                # App Router: page.tsx (chat UI), layout.tsx
+        ├── components/         # ChatInput, MessageList, MessageItem, SourcesList
+        ├── lib/api.ts          # fetch-based SSE client (async generator, AbortSignal)
+        └── types/api.ts        # TypeScript interfaces matching backend schemas
 ```
 
 ---
@@ -143,6 +150,7 @@ learn_rag/
 - Calls `load_dotenv()` before any imports — required so LangFuse can read `LANGFUSE_*` from `os.environ` (pydantic-settings does not write back to the environment)
 - Creates the FastAPI app instance
 - Registers the lifespan context manager (DB pool init/teardown, model load)
+- Adds `CORSMiddleware` — allowed origins read from `Settings.allowed_origins` (default `["*"]` for dev)
 - Mounts all routers with version prefix (`/api/v1`)
 
 ### `app/config.py`
@@ -152,16 +160,15 @@ learn_rag/
 - All secrets and tunable knobs live here
 
 ### `app/api/routes/query.py`
-- Accepts `POST /api/v1/query` with `QueryRequest`
-- Calls `answer()` from `query_service` directly — no `Depends()` indirection needed for a stateless function
-- Returns `QueryResponse`
-- Handles HTTP-level errors (422, 500)
+- `POST /api/v1/query` — calls `answer()`, returns `QueryResponse` (full response, LangFuse traced)
+- `POST /api/v1/query/stream` — calls `stream_answer()`, returns `StreamingResponse(text/event-stream)`
+- SSE event format: `{"type": "sources"|"token"|"done"|"error", ...}`
+- Catches `LLMOverloadedError` from `app/core/llm.py` for user-friendly overload messages
 
 ### `app/services/query_service.py`
-- Exposes a module-level `answer(request)` function — no class wrapper
-- `@observe` must wrap a module-level function; LangFuse v4 does not propagate trace context correctly on instance methods
-- `answer()` owns the RAG prompt template and assembles the full flow: embed → retrieve → generate
-- LangFuse tracing via `@observe(name="rag_query")` and `get_client()` for I/O metadata
+- `answer(request)` — full non-streaming RAG flow; `@observe(name="rag_query")` for tracing
+- `stream_answer(request)` — async generator yielding SSE event dicts; manually traced via `get_client().trace()` (LangFuse `@observe` cannot decorate async generators)
+- Both functions own `_SYSTEM_PROMPT` and orchestrate embed → retrieve → generate
 
 ### `app/core/embedder.py`
 - Wraps `sentence-transformers` `all-MiniLM-L6-v2`
@@ -178,10 +185,9 @@ learn_rag/
 - No embedding logic — receives a pre-computed vector and raw query text
 
 ### `app/core/llm.py`
-- Thin async wrapper around `anthropic.AsyncAnthropic`
-- `generate(question, chunks, system_prompt) → str`
-- Decorated with `@observe(as_type="generation")` — LangFuse v4 records model, token counts, and cost automatically
-- Uses `get_client().update_current_generation()` to attach metadata to the active span
+- `generate(question, chunks, system_prompt) → str` — full response; `@observe(as_type="generation")` for LangFuse tracing
+- `stream_generate(question, chunks, system_prompt) → AsyncIterator[str]` — streams tokens via `client.messages.stream()`
+- `LLMOverloadedError` — domain exception raised when Anthropic returns `overloaded_error`; keeps the Anthropic SDK out of the router layer
 - One place to change model or max_tokens
 
 ### `app/db/connection.py`
@@ -333,15 +339,17 @@ python -m ingestion.pipeline
 
 ## LangFuse Tracing Structure
 
-Every query produces one trace with a nested generation:
-
+**Non-streaming path** — decorator-based, fully automatic:
 ```
-trace: rag_query              (@observe on answer() — sets input/output via get_client())
+trace: rag_query              (@observe on answer())
   └── generation: llm_call    (@observe(as_type="generation") on generate() — model, tokens, cost)
 ```
 
-Tracing uses the LangFuse v4 decorator API (`from langfuse import observe, get_client`).
-The `@observe` decorator creates the trace context; `get_client()` attaches metadata to the active span.
+**Streaming path** — manual trace, because `@observe` cannot decorate async generators:
+```
+trace: rag_query_stream       (get_client().trace() in stream_answer())
+```
+`stream_answer` accumulates the full answer text and calls `trace.update(output=...)` before yielding the `done` event. The `trace_id` is passed to the frontend in the `done` event payload.
 
 ---
 
@@ -419,6 +427,29 @@ select = ["E", "F", "I", "UP", "W292"]
 
 ---
 
+## Frontend (client/)
+
+A chat UI served independently from the API. Run with `make client` (Next.js dev server on port 3000).
+
+**Stack:** Next.js 16 + TypeScript + Tailwind CSS v4 + react-markdown
+
+**Streaming protocol:** The client uses `fetch` + `ReadableStream` (not `EventSource`, which is GET-only) to consume the SSE stream from `POST /api/v1/query/stream`. Each SSE line is `data: <json>\n\n`:
+
+| Event | Payload | When |
+|---|---|---|
+| `sources` | `{type, sources: RetrievedChunk[]}` | After retrieval, before first token |
+| `token` | `{type, text: string}` | Once per LLM token |
+| `done` | `{type, trace_id: string}` | Stream complete |
+| `error` | `{type, message: string}` | On failure |
+
+**Key implementation notes:**
+- Chat history is in-memory React state (`Message[]`) — resets on page reload, no persistence
+- `AbortController` cancels in-flight requests when a new question is submitted or the component unmounts
+- Streaming cursor is a sibling `<span>` outside `<ReactMarkdown>` — injecting it into the markdown string corrupts mid-stream code fences
+- Auto-scroll suppressed when the user has scrolled up (tracked via `onScroll` on the container)
+
+---
+
 ## Adapting to a New Domain
 
 The RAG pipeline is domain-agnostic. Only three things are FastAPI-specific:
@@ -463,5 +494,6 @@ LANGFUSE_BASE_URL=https://cloud.langfuse.com
 LOG_LEVEL=INFO
 TOP_K_DEFAULT=8
 MAX_TOKENS=1024
+ALLOWED_ORIGINS=["*"]          # lock down in production, e.g. ["https://yourdomain.com"]
 ```
 
