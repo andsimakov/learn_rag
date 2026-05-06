@@ -1,3 +1,4 @@
+from collections.abc import AsyncGenerator
 from functools import lru_cache
 
 import anthropic
@@ -57,3 +58,29 @@ async def generate(
     )
 
     return answer
+
+
+async def stream_generate(
+    question: str,
+    chunks: list[RetrievedChunk],
+    system_prompt: str,
+) -> AsyncGenerator[str, None]:
+    settings = get_settings()
+    client = _get_client()
+
+    context = "\n\n---\n\n".join(f"[{chunk.source_url}]\n{chunk.content}" for chunk in chunks)
+    messages = [
+        {
+            "role": "user",
+            "content": f"<context>\n{context}\n</context>\n\nQuestion: {question}",
+        }
+    ]
+
+    async with client.messages.stream(
+        model=settings.anthropic_model,
+        max_tokens=settings.max_tokens,
+        system=system_prompt,
+        messages=messages,
+    ) as stream:
+        async for text in stream.text_stream:
+            yield text

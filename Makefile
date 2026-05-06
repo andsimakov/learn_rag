@@ -62,6 +62,16 @@ check: lint format  ## Run lint + format (CI-style, no auto-fix)
 test:  ## Run the test suite
 	pytest
 
+# ── Frontend ──────────────────────────────────────────────────────────────────
+
+.PHONY: client-install
+client-install:  ## Install frontend dependencies
+	cd client && npm install
+
+.PHONY: client
+client:  ## Start the frontend dev server on http://localhost:3000
+	cd client && npm run dev
+
 # ── Help ──────────────────────────────────────────────────────────────────────
 
 .PHONY: help
