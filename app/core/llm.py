@@ -1,4 +1,4 @@
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncIterator
 from functools import lru_cache
 
 import anthropic
@@ -68,7 +68,7 @@ async def stream_generate(
     question: str,
     chunks: list[RetrievedChunk],
     system_prompt: str,
-) -> AsyncGenerator[str, None]:
+) -> AsyncIterator[str]:
     settings = get_settings()
     client = _get_client()
 

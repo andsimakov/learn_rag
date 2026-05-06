@@ -1,4 +1,4 @@
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncIterator
 
 from langfuse import get_client, observe
 
@@ -38,7 +38,7 @@ async def answer(request: QueryRequest) -> QueryResponse:
     return QueryResponse(answer=answer_text, sources=chunks, trace_id=trace_id)
 
 
-async def stream_answer(request: QueryRequest) -> AsyncGenerator[dict, None]:
+async def stream_answer(request: QueryRequest) -> AsyncIterator[dict]:
     lf = get_client()
     trace = lf.trace(
         name="rag_query_stream",
