@@ -33,9 +33,9 @@ def create_app() -> FastAPI:
     )
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["http://localhost:3000"],
-        allow_methods=["GET", "POST"],
-        allow_headers=["Content-Type"],
+        allow_origins=["*"],
+        allow_methods=["*"],
+        allow_headers=["*"],
     )
     app.include_router(health.router, prefix="/api/v1", tags=["health"])
     app.include_router(query.router, prefix="/api/v1", tags=["query"])
