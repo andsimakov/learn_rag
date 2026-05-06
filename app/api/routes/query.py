@@ -2,10 +2,10 @@ import json
 import logging
 from collections.abc import AsyncIterator
 
-import anthropic
 from fastapi import APIRouter, HTTPException, status
 from fastapi.responses import StreamingResponse
 
+from app.core.llm import LLMOverloadedError
 from app.schemas.query import QueryRequest, QueryResponse
 from app.services.query_service import answer, stream_answer
 
@@ -30,14 +30,9 @@ async def query_stream(request: QueryRequest) -> StreamingResponse:
                 yield f"data: {json.dumps(event)}\n\n"
         except Exception as exc:
             log.exception("Stream failed")
-            overloaded = (
-                isinstance(exc, anthropic.APIStatusError)
-                and isinstance(exc.body, dict)
-                and exc.body.get("error", {}).get("type") == "overloaded_error"
-            )
             msg = (
                 "The AI service is temporarily overloaded — please try again in a moment."
-                if overloaded
+                if isinstance(exc, LLMOverloadedError)
                 else "Something went wrong. Please try again."
             )
             yield f"data: {json.dumps({'type': 'error', 'message': msg})}\n\n"

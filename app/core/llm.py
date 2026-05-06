@@ -8,6 +8,10 @@ from app.config import get_settings
 from app.schemas.query import RetrievedChunk
 
 
+class LLMOverloadedError(Exception):
+    """LLM provider is temporarily over capacity."""
+
+
 @lru_cache(maxsize=1)
 def _get_client() -> anthropic.AsyncAnthropic:
     settings = get_settings()
@@ -82,5 +86,11 @@ async def stream_generate(
         system=system_prompt,
         messages=messages,
     ) as stream:
-        async for text in stream.text_stream:
-            yield text
+        try:
+            async for text in stream.text_stream:
+                yield text
+        except anthropic.APIStatusError as exc:
+            body = exc.body if isinstance(exc.body, dict) else {}
+            if body.get("error", {}).get("type") == "overloaded_error":
+                raise LLMOverloadedError from exc
+            raise
