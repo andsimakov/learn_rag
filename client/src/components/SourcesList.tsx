@@ -13,10 +13,13 @@ export function SourcesList({ sources }: Props) {
   return (
     <div className="text-sm">
       <button
+        type="button"
+        aria-expanded={open}
         onClick={() => setOpen(!open)}
         className="flex items-center gap-1.5 text-gray-400 hover:text-gray-600 transition-colors text-xs"
       >
         <svg
+          aria-hidden="true"
           className={`w-3.5 h-3.5 transition-transform ${open ? "rotate-90" : ""}`}
           fill="none"
           stroke="currentColor"
@@ -34,9 +37,9 @@ export function SourcesList({ sources }: Props) {
 
       {open && (
         <div className="mt-2 space-y-2 max-w-xl">
-          {sources.map((s, i) => (
+          {sources.map((s) => (
             <div
-              key={i}
+              key={s.source_url}
               className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2"
             >
               <a

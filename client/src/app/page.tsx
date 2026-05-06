@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ChatInput } from "@/components/ChatInput";
 import { MessageList } from "@/components/MessageList";
 import { streamQuery } from "@/lib/api";
@@ -9,8 +9,17 @@ import type { Message } from "@/types/api";
 export default function Home() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
+  const abortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    return () => { abortRef.current?.abort(); };
+  }, []);
 
   async function handleSubmit(question: string) {
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     const id = crypto.randomUUID();
     setMessages((prev) => [
       ...prev,
@@ -19,7 +28,7 @@ export default function Home() {
     setIsStreaming(true);
 
     try {
-      for await (const event of streamQuery(question)) {
+      for await (const event of streamQuery(question, 8, controller.signal)) {
         if (event.type === "sources") {
           setMessages((prev) =>
             prev.map((m) => (m.id === id ? { ...m, sources: event.sources } : m)),
@@ -44,7 +53,13 @@ export default function Home() {
           );
         }
       }
-    } catch {
+    } catch (e) {
+      if (e instanceof Error && e.name === "AbortError") {
+        setMessages((prev) =>
+          prev.map((m) => (m.id === id ? { ...m, status: "done" } : m)),
+        );
+        return;
+      }
       setMessages((prev) =>
         prev.map((m) =>
           m.id === id

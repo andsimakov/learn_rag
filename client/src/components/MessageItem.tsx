@@ -7,11 +7,6 @@ interface Props {
 }
 
 export function MessageItem({ message }: Props) {
-  const displayText =
-    message.status === "streaming"
-      ? message.answer + "▋"
-      : message.answer;
-
   return (
     <div className="space-y-2">
       {/* Question */}
@@ -31,25 +26,33 @@ export function MessageItem({ message }: Props) {
               <span className="w-1.5 h-1.5 rounded-full bg-gray-400 animate-bounce" />
             </span>
           ) : (
-            <ReactMarkdown
-              components={{
-                p: ({ children }) => (
-                  <p className="mb-2 last:mb-0">{children}</p>
-                ),
-                code: ({ children }) => (
-                  <code className="bg-gray-100 rounded px-1 py-0.5 text-xs font-mono">
-                    {children}
-                  </code>
-                ),
-                pre: ({ children }) => (
-                  <pre className="bg-gray-100 rounded p-3 text-xs font-mono overflow-x-auto my-2">
-                    {children}
-                  </pre>
-                ),
-              }}
-            >
-              {displayText}
-            </ReactMarkdown>
+            <>
+              <ReactMarkdown
+                components={{
+                  p: ({ children }) => (
+                    <p className="mb-2 last:mb-0">{children}</p>
+                  ),
+                  code: ({ children }) => (
+                    <code className="bg-gray-100 rounded px-1 py-0.5 text-xs font-mono">
+                      {children}
+                    </code>
+                  ),
+                  pre: ({ children }) => (
+                    <pre className="bg-gray-100 rounded p-3 text-xs font-mono overflow-x-auto my-2">
+                      {children}
+                    </pre>
+                  ),
+                }}
+              >
+                {message.answer}
+              </ReactMarkdown>
+              {message.status === "streaming" && (
+                <span
+                  className="inline-block w-0.5 h-4 bg-gray-400 animate-pulse mt-1"
+                  aria-hidden="true"
+                />
+              )}
+            </>
           )}
         </div>
       </div>

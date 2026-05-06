@@ -9,16 +9,28 @@ interface Props {
 }
 
 export function MessageList({ messages }: Props) {
+  const containerRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const isAtBottomRef = useRef(true);
+
+  function handleScroll() {
+    const el = containerRef.current;
+    if (!el) return;
+    isAtBottomRef.current =
+      el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+  }
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (isAtBottomRef.current) {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
   }, [messages]);
 
   if (messages.length === 0) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-2 text-gray-400">
         <svg
+          aria-hidden="true"
           className="w-10 h-10 text-gray-300"
           fill="none"
           stroke="currentColor"
@@ -37,7 +49,11 @@ export function MessageList({ messages }: Props) {
   }
 
   return (
-    <div className="h-full overflow-y-auto px-4 py-6">
+    <div
+      ref={containerRef}
+      onScroll={handleScroll}
+      className="h-full overflow-y-auto px-4 py-6"
+    >
       <div className="max-w-3xl mx-auto space-y-6">
         {messages.map((m) => (
           <MessageItem key={m.id} message={m} />
