@@ -32,12 +32,14 @@ export async function* streamQuery(
       if (done) break;
 
       buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n");
-      buffer = lines.pop() ?? "";
+      const events = buffer.split("\n\n");
+      buffer = events.pop() ?? "";
 
-      for (const line of lines) {
-        if (line.startsWith("data: ")) {
-          yield JSON.parse(line.slice(6)) as SseEvent;
+      for (const event of events) {
+        for (const line of event.split("\n")) {
+          if (line.startsWith("data: ")) {
+            yield JSON.parse(line.slice(6)) as SseEvent;
+          }
         }
       }
     }

@@ -33,3 +33,8 @@ def get_pool() -> asyncpg.Pool:
     if _pool is None:
         raise RuntimeError("Database pool not initialized — call create_pool() first.")
     return _pool
+
+
+async def ping_pool() -> None:
+    async with get_pool().acquire() as conn:
+        await conn.fetchval("SELECT 1")

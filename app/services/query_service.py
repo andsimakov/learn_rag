@@ -1,11 +1,13 @@
-from collections.abc import AsyncIterator
+import logging
+from collections.abc import AsyncGenerator
 
 from langfuse import get_client, observe
 
 from app.core import embedder, retriever
 from app.core.llm import generate, stream_generate
-from app.db.connection import get_pool
 from app.schemas.query import QueryRequest, QueryResponse
+
+log = logging.getLogger(__name__)
 
 _SYSTEM_PROMPT = (
     "You are an expert assistant for FastAPI documentation. "
@@ -20,10 +22,8 @@ async def answer(request: QueryRequest) -> QueryResponse:
     lf = get_client()
     lf.set_current_trace_io(input={"question": request.question, "top_k": request.top_k})
 
-    pool = get_pool()
-
     vector = await embedder.embed(request.question)
-    chunks = await retriever.search(pool, vector, request.question, request.top_k)
+    chunks = await retriever.search(vector, request.question, request.top_k)
     if not chunks:
         return QueryResponse(answer="No relevant documentation found.", sources=[], trace_id="")
     answer_text = await generate(
@@ -38,12 +38,10 @@ async def answer(request: QueryRequest) -> QueryResponse:
     return QueryResponse(answer=answer_text, sources=chunks, trace_id=trace_id)
 
 
-async def stream_answer(request: QueryRequest) -> AsyncIterator[dict]:
-    # LangFuse v4 get_client() is context-aware only — no low-level trace() method.
-    # Streaming path is not traced until LangFuse adds async generator support.
-    pool = get_pool()
+async def stream_answer(request: QueryRequest) -> AsyncGenerator[dict, None]:
+    # @observe cannot decorate async generators — trace manually after streaming completes.
     vector = await embedder.embed(request.question)
-    chunks = await retriever.search(pool, vector, request.question, request.top_k)
+    chunks = await retriever.search(vector, request.question, request.top_k)
 
     if not chunks:
         yield {"type": "sources", "sources": []}
@@ -53,7 +51,21 @@ async def stream_answer(request: QueryRequest) -> AsyncIterator[dict]:
 
     yield {"type": "sources", "sources": [c.model_dump() for c in chunks]}
 
+    tokens: list[str] = []
     async for token in stream_generate(request.question, chunks, _SYSTEM_PROMPT):
+        tokens.append(token)
         yield {"type": "token", "text": token}
 
-    yield {"type": "done", "trace_id": ""}
+    trace_id = ""
+    try:
+        lf = get_client()
+        trace = lf.trace(
+            name="rag_stream",
+            input={"question": request.question, "top_k": request.top_k},
+            output={"answer": "".join(tokens)},
+        )
+        trace_id = trace.id
+    except Exception:
+        log.warning("LangFuse trace failed", exc_info=True)
+
+    yield {"type": "done", "trace_id": trace_id}

@@ -51,17 +51,17 @@ async def generate(
         messages=messages,
     )
 
-    answer = response.content[0].text
+    answer_text = response.content[0].text
 
     lf.update_current_generation(
-        output=answer,
+        output=answer_text,
         usage_details={
             "input": response.usage.input_tokens,
             "output": response.usage.output_tokens,
         },
     )
 
-    return answer
+    return answer_text
 
 
 async def stream_generate(

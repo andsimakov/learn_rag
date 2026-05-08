@@ -23,9 +23,6 @@ _ALLOWED_FILES = {
     "docs/en/docs/features.md",
 }
 
-# Keep concurrent downloads reasonable to avoid being rate-limited.
-_SEMAPHORE = asyncio.Semaphore(10)
-
 
 @dataclass
 class DocFile:
@@ -33,8 +30,12 @@ class DocFile:
     content: str  # raw markdown
 
 
-async def _download(client: httpx.AsyncClient, path: str) -> DocFile:
-    async with _SEMAPHORE:
+async def _download(
+    client: httpx.AsyncClient,
+    path: str,
+    semaphore: asyncio.Semaphore,
+) -> DocFile:
+    async with semaphore:
         url = f"{_RAW_BASE}/{path}"
         response = await client.get(url)
         response.raise_for_status()
@@ -43,9 +44,10 @@ async def _download(client: httpx.AsyncClient, path: str) -> DocFile:
 
 async def fetch_code_files(paths: list[str]) -> dict[str, str]:
     """Fetch a list of source files (e.g. docs_src/**/*.py) and return {path: content}."""
+    semaphore = asyncio.Semaphore(10)
     async with httpx.AsyncClient(timeout=30.0) as client:
         results = await asyncio.gather(
-            *[_download(client, p) for p in paths],
+            *[_download(client, p, semaphore) for p in paths],
             return_exceptions=True,
         )
     code_map: dict[str, str] = {}
@@ -63,6 +65,7 @@ async def fetch_fastapi_docs() -> list[DocFile]:
     2. Download each .md file under docs/en/docs/ from raw.githubusercontent.com
        (no API rate limit applies to raw downloads).
     """
+    semaphore = asyncio.Semaphore(10)
     async with httpx.AsyncClient(timeout=30.0) as client:
         response = await client.get(
             _TREE_URL,
@@ -82,7 +85,7 @@ async def fetch_fastapi_docs() -> list[DocFile]:
         print(f"Found {len(paths)} markdown files")
 
         results = await asyncio.gather(
-            *[_download(client, path) for path in paths],
+            *[_download(client, path, semaphore) for path in paths],
             return_exceptions=True,
         )
 

@@ -3,13 +3,15 @@ import re
 from functools import lru_cache
 
 import anthropic
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.config import get_settings
 from app.schemas.query import RetrievedChunk
 
 
 class EvalScore(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
     faithfulness: int = Field(ge=1, le=5)
     relevance: int = Field(ge=1, le=5)
     reasoning: str
@@ -19,6 +21,8 @@ class EvalScore(BaseModel):
 def _get_client() -> anthropic.AsyncAnthropic:
     return anthropic.AsyncAnthropic(api_key=get_settings().anthropic_api_key)
 
+
+_JUDGE_MAX_TOKENS = 256  # JSON-only response; ~50 tokens in practice
 
 _JUDGE_PROMPT = """\
 You are evaluating a RAG (Retrieval-Augmented Generation) system answer.
@@ -60,7 +64,7 @@ async def judge(
 
     response = await client.messages.create(
         model=settings.anthropic_model,
-        max_tokens=256,  # tight budget — response is JSON only, ~50 tokens in practice
+        max_tokens=_JUDGE_MAX_TOKENS,
         messages=[
             {
                 "role": "user",
@@ -74,9 +78,11 @@ async def judge(
         ],
     )
 
+    if not response.content:
+        raise ValueError("Judge received empty response from LLM")
     text = response.content[0].text
     match = re.search(r"\{.*\}", text, re.DOTALL)
     if not match:
         raise ValueError(f"No JSON object in judge response: {text!r}")
     data = json.loads(match.group())
-    return EvalScore(**data)
+    return EvalScore.model_validate(data)

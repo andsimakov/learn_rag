@@ -43,7 +43,7 @@ export function SourcesList({ sources }: Props) {
               className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2"
             >
               <a
-                href={/^https?:\/\//.test(s.source_url) ? s.source_url : "#"}
+                href={/^https?:\/\//i.test(s.source_url) ? s.source_url : "#"}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-blue-600 hover:underline font-medium text-xs block mb-1 truncate"

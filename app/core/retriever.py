@@ -1,8 +1,8 @@
 import re
 
-import asyncpg
 import numpy as np
 
+from app.db.connection import get_pool
 from app.schemas.query import RetrievedChunk
 
 # Standard RRF constant from the original paper.
@@ -61,12 +61,12 @@ def _fts_query(question: str) -> str | None:
 
 
 async def search(
-    pool: asyncpg.Pool,
     vector: np.ndarray,
     query_text: str,
     top_k: int,
 ) -> list[RetrievedChunk]:
     """Hybrid BM25 + cosine similarity search fused via Reciprocal Rank Fusion."""
+    pool = get_pool()
     # Larger vector pool catches semantically-distant but relevant chunks
     # (e.g. "handle errors" → "use HTTPException" at vector rank ~38).
     vec_pool = top_k * 5
