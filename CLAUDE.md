@@ -84,8 +84,9 @@ the wrapper class added nothing but indirection — `query_service.py` now expos
 
 **`@observe` cannot decorate async generators**
 LangFuse's `@observe` decorator does not support async generator functions. For the streaming path,
-create a trace manually: `trace = get_client().trace(name=..., input=...)`, accumulate the full
-answer, then call `trace.update(output=...)` and yield `trace.id` in the `done` event.
+create a trace manually inside a `try/finally` block: accumulate all tokens, then call
+`lf.trace(name=..., input=..., output=...)` in the `finally` so the trace is recorded even on
+client disconnect. Yield the `trace_id` in the `done` event.
 
 **LangFuse `get_client()` ignores `.env` file**
 `pydantic-settings` reads `.env` into the `Settings` object but does not write to `os.environ`.

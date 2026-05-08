@@ -150,7 +150,7 @@ learn_rag/
 - Calls `load_dotenv()` before any imports — required so LangFuse can read `LANGFUSE_*` from `os.environ` (pydantic-settings does not write back to the environment)
 - Creates the FastAPI app instance
 - Registers the lifespan context manager (DB pool init/teardown, model load)
-- Adds `CORSMiddleware` — allowed origins read from `Settings.allowed_origins` (default `["*"]` for dev)
+- Adds `CORSMiddleware` — allowed origins read from `Settings.allowed_origins` (default `["http://localhost:3000", "http://localhost:3001"]`)
 - Mounts all routers with version prefix (`/api/v1`)
 
 ### `app/config.py`
@@ -177,7 +177,7 @@ learn_rag/
 - Model is loaded once at startup, reused across requests
 
 ### `app/core/retriever.py`
-- `search(pool, vector, query_text, top_k) → list[RetrievedChunk]`
+- `search(vector, query_text, top_k) → list[RetrievedChunk]` — acquires the pool internally via `get_pool()`
 - Hybrid BM25 + cosine similarity search fused via Reciprocal Rank Fusion (RRF, k=60)
 - Vector arm: `embedding <=> $1::vector` over `top_k * 5` candidates
 - FTS arm: stopword-stripped AND `tsquery` over `content_tsv`, `top_k * 3` candidates
@@ -186,8 +186,9 @@ learn_rag/
 
 ### `app/core/llm.py`
 - `generate(question, chunks, system_prompt) → str` — full response; `@observe(as_type="generation")` for LangFuse tracing
-- `stream_generate(question, chunks, system_prompt) → AsyncIterator[str]` — streams tokens via `client.messages.stream()`
+- `stream_generate(question, chunks, system_prompt) → AsyncGenerator[str, None]` — streams tokens via `client.messages.stream()`
 - `LLMOverloadedError` — domain exception raised when Anthropic returns `overloaded_error`; keeps the Anthropic SDK out of the router layer
+- `is_overloaded(exc)` / `get_client_cached()` — public helpers reused by `eval/judge.py`
 - One place to change model or max_tokens
 
 ### `app/db/connection.py`
@@ -206,7 +207,7 @@ learn_rag/
 - Defines `EvalScore` Pydantic model (faithfulness 1–5, relevance 1–5, reasoning)
 - `judge(question, chunks, answer, reference) → EvalScore`
 - Sends a structured prompt to Claude asking for JSON scores
-- Anthropic client is cached via `@lru_cache(maxsize=1)` — one connection pool for the full eval run
+- Reuses `get_client_cached()` and `is_overloaded()` from `app/core/llm.py`
 
 ### `eval/run_eval.py`
 - CLI: `python -m eval.run_eval`
@@ -347,9 +348,9 @@ trace: rag_query              (@observe on answer())
 
 **Streaming path** — manual trace, because `@observe` cannot decorate async generators:
 ```
-trace: rag_query_stream       (get_client().trace() in stream_answer())
+trace: rag_stream             (lf.trace() in stream_answer() finally block)
 ```
-`stream_answer` accumulates the full answer text and calls `trace.update(output=...)` before yielding the `done` event. The `trace_id` is passed to the frontend in the `done` event payload.
+`stream_answer` accumulates tokens in a `try/finally`; the `finally` calls `lf.trace(output=...)` so the trace is recorded even if the client disconnects mid-stream. The `trace_id` is passed to the frontend in the `done` event payload.
 
 ---
 
@@ -494,6 +495,6 @@ LANGFUSE_BASE_URL=https://cloud.langfuse.com
 LOG_LEVEL=INFO
 TOP_K_DEFAULT=8
 MAX_TOKENS=1024
-ALLOWED_ORIGINS=["*"]          # lock down in production, e.g. ["https://yourdomain.com"]
+ALLOWED_ORIGINS=["http://localhost:3000","http://localhost:3001"]  # add production origin as needed
 ```
 
