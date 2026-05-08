@@ -1,7 +1,7 @@
-"""Tests for stream_answer in app/services/query_service.py."""
+"""Tests for answer() and stream_answer() in app/services/query_service.py."""
 
-from app.schemas.query import QueryRequest, RetrievedChunk
-from app.services.query_service import stream_answer
+from app.schemas.query import QueryRequest, QueryResponse, RetrievedChunk
+from app.services.query_service import answer, stream_answer
 
 
 def _make_chunk() -> RetrievedChunk:
@@ -15,6 +15,55 @@ def _make_chunk() -> RetrievedChunk:
 
 def _make_request() -> QueryRequest:
     return QueryRequest(question="What is FastAPI?", top_k=5)
+
+
+async def test_answer_happy_path(mocker):
+    mocker.patch(
+        "app.services.query_service.embedder.embed",
+        new_callable=mocker.AsyncMock,
+        return_value=[0.1] * 384,
+    )
+    mocker.patch(
+        "app.services.query_service.retriever.search",
+        new_callable=mocker.AsyncMock,
+        return_value=[_make_chunk()],
+    )
+    mocker.patch(
+        "app.services.query_service.generate",
+        new_callable=mocker.AsyncMock,
+        return_value="FastAPI is a web framework.",
+    )
+    mock_lf = mocker.MagicMock()
+    mock_lf.get_current_trace_id.return_value = "trace-xyz"
+    mocker.patch("app.services.query_service.get_client", return_value=mock_lf)
+
+    result = await answer(_make_request())
+
+    assert isinstance(result, QueryResponse)
+    assert result.answer == "FastAPI is a web framework."
+    assert result.trace_id == "trace-xyz"
+    assert len(result.sources) == 1
+
+
+async def test_answer_no_chunks_returns_fallback(mocker):
+    mocker.patch(
+        "app.services.query_service.embedder.embed",
+        new_callable=mocker.AsyncMock,
+        return_value=[0.1] * 384,
+    )
+    mocker.patch(
+        "app.services.query_service.retriever.search",
+        new_callable=mocker.AsyncMock,
+        return_value=[],
+    )
+    mock_lf = mocker.MagicMock()
+    mocker.patch("app.services.query_service.get_client", return_value=mock_lf)
+
+    result = await answer(_make_request())
+
+    assert result.answer == "No relevant documentation found."
+    assert result.sources == []
+    assert result.trace_id == ""
 
 
 async def _token_generator(*tokens: str):

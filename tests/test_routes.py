@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, status
 from fastapi.testclient import TestClient
 
 from app.api.routes.query import router
@@ -21,7 +21,7 @@ def _fake_response() -> QueryResponse:
 def test_query_returns_200(mocker):
     mocker.patch("app.api.routes.query.answer", return_value=_fake_response())
     resp = client.post("/query", json={"question": "What is FastAPI?", "top_k": 5})
-    assert resp.status_code == 200
+    assert resp.status_code == status.HTTP_200_OK
     data = resp.json()
     assert data["answer"] == "Test answer."
     assert data["trace_id"] == "trace-123"
@@ -31,10 +31,10 @@ def test_query_returns_200(mocker):
 def test_query_returns_500_on_exception(mocker):
     mocker.patch("app.api.routes.query.answer", side_effect=RuntimeError("boom"))
     resp = client.post("/query", json={"question": "What is FastAPI?", "top_k": 5})
-    assert resp.status_code == 500
+    assert resp.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
     assert resp.json()["detail"] == "Internal server error"
 
 
 def test_query_returns_422_for_empty_question():
     resp = client.post("/query", json={"question": "", "top_k": 5})
-    assert resp.status_code == 422
+    assert resp.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT

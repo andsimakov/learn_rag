@@ -20,7 +20,7 @@ class Settings(BaseSettings):
         return f"postgresql://{self.postgres_user}:{self.postgres_password.get_secret_value()}@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
 
     # Anthropic
-    anthropic_api_key: str
+    anthropic_api_key: SecretStr
     anthropic_model: str = "claude-sonnet-4-6"
 
     # LangFuse
@@ -36,6 +36,7 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     top_k_default: int = 8
     max_tokens: int = 1024
+    judge_max_tokens: int = 256
     allowed_origins: list[str] = ["http://localhost:3000", "http://localhost:3001"]
 
 

@@ -107,7 +107,15 @@ def extract_fetch_paths(chunks: list[Chunk]) -> list[str]:
 
 
 def substitute_code(chunks: list[Chunk], code_map: dict[str, str]) -> list[Chunk]:
-    """Replace <<<FETCH:path>>> markers with fenced Python code blocks."""
+    """Replace <<<FETCH:path>>> markers with fenced Python code blocks.
+
+    Chunks whose every marker fails to resolve are dropped (content becomes
+    empty). This preserves the original chunk_index on survivors. On re-ingestion
+    after a partial code-fetch failure, stale DB rows for dropped chunk_indexes
+    are NOT cleaned up — the upsert only updates rows it receives. If this
+    becomes an issue, issue a DELETE WHERE source_url = $1 AND chunk_index NOT
+    IN (...) before upserting.
+    """
     result = []
     for chunk in chunks:
         content = _FETCH_MARKER_RE.sub(

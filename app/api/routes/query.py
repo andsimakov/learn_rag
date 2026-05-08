@@ -17,6 +17,11 @@ router = APIRouter()
 async def query(request: QueryRequest) -> QueryResponse:
     try:
         return await answer(request)
+    except LLMOverloadedError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="The AI service is temporarily overloaded — please try again in a moment.",
+        ) from exc
     except Exception as exc:
         log.exception("Query failed")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal server error") from exc

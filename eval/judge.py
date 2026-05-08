@@ -6,6 +6,7 @@ import anthropic
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.config import get_settings
+from app.core.llm import LLMOverloadedError, _is_overloaded
 from app.schemas.query import RetrievedChunk
 
 
@@ -19,10 +20,8 @@ class EvalScore(BaseModel):
 
 @lru_cache(maxsize=1)
 def _get_client() -> anthropic.AsyncAnthropic:
-    return anthropic.AsyncAnthropic(api_key=get_settings().anthropic_api_key)
+    return anthropic.AsyncAnthropic(api_key=get_settings().anthropic_api_key.get_secret_value())
 
-
-_JUDGE_MAX_TOKENS = 256  # JSON-only response; ~50 tokens in practice
 
 _JUDGE_PROMPT = """\
 You are evaluating a RAG (Retrieval-Augmented Generation) system answer.
@@ -62,24 +61,29 @@ async def judge(
 
     context = "\n\n---\n\n".join(f"[{chunk.source_url}]\n{chunk.content}" for chunk in chunks)
 
-    response = await client.messages.create(
-        model=settings.anthropic_model,
-        max_tokens=_JUDGE_MAX_TOKENS,
-        messages=[
-            {
-                "role": "user",
-                "content": _JUDGE_PROMPT.format(
-                    question=question,
-                    context=context,
-                    answer=answer,
-                    reference_answer=reference_answer,
-                ),
-            }
-        ],
-    )
+    try:
+        response = await client.messages.create(
+            model=settings.anthropic_model,
+            max_tokens=settings.judge_max_tokens,
+            messages=[
+                {
+                    "role": "user",
+                    "content": _JUDGE_PROMPT.format(
+                        question=question,
+                        context=context,
+                        answer=answer,
+                        reference_answer=reference_answer,
+                    ),
+                }
+            ],
+        )
+    except anthropic.APIStatusError as exc:
+        if _is_overloaded(exc):
+            raise LLMOverloadedError from exc
+        raise RuntimeError("Judge LLM call failed") from exc
 
-    if not response.content:
-        raise ValueError("Judge received empty response from LLM")
+    if not response.content or response.content[0].type != "text":
+        raise ValueError("Judge received an empty or non-text response from LLM")
     text = response.content[0].text
     match = re.search(r"\{.*\}", text, re.DOTALL)
     if not match:

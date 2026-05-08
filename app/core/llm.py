@@ -12,10 +12,15 @@ class LLMOverloadedError(Exception):
     """LLM provider is temporarily over capacity."""
 
 
+def _is_overloaded(exc: anthropic.APIStatusError) -> bool:
+    body = exc.body if isinstance(exc.body, dict) else {}
+    return body.get("error", {}).get("type") == "overloaded_error"
+
+
 @lru_cache(maxsize=1)
 def _get_client() -> anthropic.AsyncAnthropic:
     settings = get_settings()
-    return anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+    return anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key.get_secret_value())
 
 
 @observe(as_type="generation")
@@ -44,13 +49,20 @@ async def generate(
         metadata={"system": system_prompt},
     )
 
-    response = await client.messages.create(
-        model=settings.anthropic_model,
-        max_tokens=settings.max_tokens,
-        system=system_prompt,
-        messages=messages,
-    )
+    try:
+        response = await client.messages.create(
+            model=settings.anthropic_model,
+            max_tokens=settings.max_tokens,
+            system=system_prompt,
+            messages=messages,
+        )
+    except anthropic.APIStatusError as exc:
+        if _is_overloaded(exc):
+            raise LLMOverloadedError from exc
+        raise
 
+    if not response.content or response.content[0].type != "text":
+        raise ValueError("LLM returned an empty or non-text response")
     answer_text = response.content[0].text
 
     lf.update_current_generation(
@@ -80,17 +92,16 @@ async def stream_generate(
         }
     ]
 
-    async with client.messages.stream(
-        model=settings.anthropic_model,
-        max_tokens=settings.max_tokens,
-        system=system_prompt,
-        messages=messages,
-    ) as stream:
-        try:
+    try:
+        async with client.messages.stream(
+            model=settings.anthropic_model,
+            max_tokens=settings.max_tokens,
+            system=system_prompt,
+            messages=messages,
+        ) as stream:
             async for text in stream.text_stream:
                 yield text
-        except anthropic.APIStatusError as exc:
-            body = exc.body if isinstance(exc.body, dict) else {}
-            if body.get("error", {}).get("type") == "overloaded_error":
-                raise LLMOverloadedError from exc
-            raise
+    except anthropic.APIStatusError as exc:
+        if _is_overloaded(exc):
+            raise LLMOverloadedError from exc
+        raise
