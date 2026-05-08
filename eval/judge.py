@@ -1,12 +1,11 @@
 import json
 import re
-from functools import lru_cache
 
 import anthropic
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.config import get_settings
-from app.core.llm import LLMOverloadedError, _is_overloaded
+from app.core.llm import LLMOverloadedError, get_client_cached, is_overloaded
 from app.schemas.query import RetrievedChunk
 
 
@@ -16,11 +15,6 @@ class EvalScore(BaseModel):
     faithfulness: int = Field(ge=1, le=5)
     relevance: int = Field(ge=1, le=5)
     reasoning: str
-
-
-@lru_cache(maxsize=1)
-def _get_client() -> anthropic.AsyncAnthropic:
-    return anthropic.AsyncAnthropic(api_key=get_settings().anthropic_api_key.get_secret_value())
 
 
 _JUDGE_PROMPT = """\
@@ -57,7 +51,7 @@ async def judge(
 ) -> EvalScore:
     """Use Claude as a judge to score a RAG answer on faithfulness and relevance."""
     settings = get_settings()
-    client = _get_client()
+    client = get_client_cached()
 
     context = "\n\n---\n\n".join(f"[{chunk.source_url}]\n{chunk.content}" for chunk in chunks)
 
@@ -78,7 +72,7 @@ async def judge(
             ],
         )
     except anthropic.APIStatusError as exc:
-        if _is_overloaded(exc):
+        if is_overloaded(exc):
             raise LLMOverloadedError from exc
         raise RuntimeError("Judge LLM call failed") from exc
 

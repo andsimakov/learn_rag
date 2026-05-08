@@ -1,4 +1,4 @@
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator
 from functools import lru_cache
 
 import anthropic
@@ -12,13 +12,13 @@ class LLMOverloadedError(Exception):
     """LLM provider is temporarily over capacity."""
 
 
-def _is_overloaded(exc: anthropic.APIStatusError) -> bool:
+def is_overloaded(exc: anthropic.APIStatusError) -> bool:
     body = exc.body if isinstance(exc.body, dict) else {}
     return body.get("error", {}).get("type") == "overloaded_error"
 
 
 @lru_cache(maxsize=1)
-def _get_client() -> anthropic.AsyncAnthropic:
+def get_client_cached() -> anthropic.AsyncAnthropic:
     settings = get_settings()
     return anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key.get_secret_value())
 
@@ -31,7 +31,7 @@ async def generate(
 ) -> str:
     """Call Claude with the retrieved context. Recorded as a generation in LangFuse."""
     settings = get_settings()
-    client = _get_client()
+    client = get_client_cached()
     lf = get_client()
 
     context = "\n\n---\n\n".join(f"[{chunk.source_url}]\n{chunk.content}" for chunk in chunks)
@@ -57,7 +57,7 @@ async def generate(
             messages=messages,
         )
     except anthropic.APIStatusError as exc:
-        if _is_overloaded(exc):
+        if is_overloaded(exc):
             raise LLMOverloadedError from exc
         raise
 
@@ -80,9 +80,9 @@ async def stream_generate(
     question: str,
     chunks: list[RetrievedChunk],
     system_prompt: str,
-) -> AsyncIterator[str]:
+) -> AsyncGenerator[str, None]:
     settings = get_settings()
-    client = _get_client()
+    client = get_client_cached()
 
     context = "\n\n---\n\n".join(f"[{chunk.source_url}]\n{chunk.content}" for chunk in chunks)
     messages = [
@@ -102,6 +102,6 @@ async def stream_generate(
             async for text in stream.text_stream:
                 yield text
     except anthropic.APIStatusError as exc:
-        if _is_overloaded(exc):
+        if is_overloaded(exc):
             raise LLMOverloadedError from exc
         raise

@@ -52,20 +52,21 @@ async def stream_answer(request: QueryRequest) -> AsyncGenerator[dict, None]:
     yield {"type": "sources", "sources": [c.model_dump() for c in chunks]}
 
     tokens: list[str] = []
-    async for token in stream_generate(request.question, chunks, _SYSTEM_PROMPT):
-        tokens.append(token)
-        yield {"type": "token", "text": token}
-
-    trace_id = ""
     try:
-        lf = get_client()
-        trace = lf.trace(
-            name="rag_stream",
-            input={"question": request.question, "top_k": request.top_k},
-            output={"answer": "".join(tokens)},
-        )
-        trace_id = trace.id
-    except Exception:
-        log.warning("LangFuse trace failed", exc_info=True)
+        async for token in stream_generate(request.question, chunks, _SYSTEM_PROMPT):
+            tokens.append(token)
+            yield {"type": "token", "text": token}
+    finally:
+        trace_id = ""
+        try:
+            lf = get_client()
+            trace = lf.trace(
+                name="rag_stream",
+                input={"question": request.question, "top_k": request.top_k},
+                output={"answer": "".join(tokens)},
+            )
+            trace_id = trace.id
+        except Exception:
+            log.warning("LangFuse trace failed", exc_info=True)
 
     yield {"type": "done", "trace_id": trace_id}

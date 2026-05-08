@@ -39,7 +39,7 @@ export function SourcesList({ sources }: Props) {
         <div className="mt-2 space-y-2 max-w-xl">
           {sources.map((s, i) => (
             <div
-              key={`${s.source_url}-${i}`}
+              key={`${s.source_url}-${s.score}`}
               className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2"
             >
               <a

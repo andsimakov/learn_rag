@@ -25,7 +25,7 @@ class Settings(BaseSettings):
 
     # LangFuse
     langfuse_public_key: str
-    langfuse_secret_key: str
+    langfuse_secret_key: SecretStr
     langfuse_base_url: str = "https://cloud.langfuse.com"
 
     # Embedding
