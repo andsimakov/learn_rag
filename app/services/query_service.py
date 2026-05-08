@@ -39,29 +39,21 @@ async def answer(request: QueryRequest) -> QueryResponse:
 
 
 async def stream_answer(request: QueryRequest) -> AsyncIterator[dict]:
-    lf = get_client()
-    trace = lf.trace(
-        name="rag_query_stream",
-        input={"question": request.question, "top_k": request.top_k},
-    )
-
+    # LangFuse v4 get_client() is context-aware only — no low-level trace() method.
+    # Streaming path is not traced until LangFuse adds async generator support.
     pool = get_pool()
     vector = await embedder.embed(request.question)
     chunks = await retriever.search(pool, vector, request.question, request.top_k)
 
     if not chunks:
-        trace.update(output={"answer": "No relevant documentation found."})
         yield {"type": "sources", "sources": []}
         yield {"type": "token", "text": "No relevant documentation found."}
-        yield {"type": "done", "trace_id": trace.id}
+        yield {"type": "done", "trace_id": ""}
         return
 
     yield {"type": "sources", "sources": [c.model_dump() for c in chunks]}
 
-    answer_text = ""
     async for token in stream_generate(request.question, chunks, _SYSTEM_PROMPT):
-        answer_text += token
         yield {"type": "token", "text": token}
 
-    trace.update(output={"answer": answer_text})
-    yield {"type": "done", "trace_id": trace.id}
+    yield {"type": "done", "trace_id": ""}
