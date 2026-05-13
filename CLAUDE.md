@@ -74,8 +74,8 @@ The pgvector pool `init` callback runs `register_vector()` before the schema is 
 then create the pool. See `ingestion/pipeline.py`.
 
 **LangFuse v4 — `langfuse.decorators` does not exist**
-In v4, `observe` and `get_client` moved to the top-level package:
-`from langfuse import observe, get_client`. The old `langfuse.decorators` module is gone.
+In v4, `observe` and `get_client` moved to the top-level package. The old `langfuse.decorators`
+module is gone. Import via the re-export shim: `from app.core.tracing import observe, get_client`.
 
 **`@observe` on a class method — `trace_id` is empty**
 LangFuse v4's `@observe` doesn't propagate trace context correctly on instance methods.
@@ -84,9 +84,13 @@ the wrapper class added nothing but indirection — `query_service.py` now expos
 
 **`@observe` cannot decorate async generators**
 LangFuse's `@observe` decorator does not support async generator functions. For the streaming path,
-create a trace manually inside a `try/finally` block: accumulate all tokens, then call
-`lf.trace(name=..., input=..., output=...)` in the `finally` so the trace is recorded even on
-client disconnect. Yield the `trace_id` in the `done` event.
+create a trace manually: accumulate tokens, then call `lf.trace(name=..., input=..., output=...)`
+in the `finally` block so the trace is recorded even on client disconnect.
+**Do NOT `yield` inside `finally`.** When Starlette cancels the response (client disconnect), it
+calls `aclose()` on the generator chain, which sends `GeneratorExit`. A `yield` inside `finally`
+at that point raises `RuntimeError: async generator ignored GeneratorExit`. Keep the trace call in
+`finally` and yield the `done` event (with `trace_id`) after the `try/finally` block — it only
+fires on clean completion, while the error path uses the `error` SSE event from the route handler.
 
 **LangFuse `get_client()` ignores `.env` file**
 `pydantic-settings` reads `.env` into the `Settings` object but does not write to `os.environ`.

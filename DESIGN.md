@@ -113,8 +113,8 @@ learn_rag/
 │   ├── core/
 │   │   ├── embedder.py         # sentence-transformers wrapper (async-safe)
 │   │   ├── retriever.py        # hybrid BM25+vector RRF search
-│   │   ├── llm.py              # generate(), stream_generate(), LLMOverloadedError
-│   │   └── tracing.py          # LangFuse v4 usage reference (decorator pattern)
+│   │   ├── llm.py              # generate(), raw_call(), stream_generate(), LLMOverloadedError
+│   │   └── tracing.py          # re-exports observe + get_client — single import point for tracing
 │   │
 │   ├── db/
 │   │   ├── connection.py       # asyncpg pool init + teardown
@@ -186,9 +186,9 @@ learn_rag/
 
 ### `app/core/llm.py`
 - `generate(question, chunks, system_prompt) → str` — full response; `@observe(as_type="generation")` for LangFuse tracing
+- `raw_call(messages, *, system_prompt, max_tokens) → str` — low-level Claude call with standard error normalisation; used by `eval/judge.py` and any caller that needs pre-formatted messages
 - `stream_generate(question, chunks, system_prompt) → AsyncGenerator[str, None]` — streams tokens via `client.messages.stream()`
 - `LLMOverloadedError` — domain exception raised when Anthropic returns `overloaded_error`; keeps the Anthropic SDK out of the router layer
-- `is_overloaded(exc)` / `get_client_cached()` — public helpers reused by `eval/judge.py`
 - One place to change model or max_tokens
 
 ### `app/db/connection.py`
@@ -206,8 +206,7 @@ learn_rag/
 ### `eval/judge.py`
 - Defines `EvalScore` Pydantic model (faithfulness 1–5, relevance 1–5, reasoning)
 - `judge(question, chunks, answer, reference) → EvalScore`
-- Sends a structured prompt to Claude asking for JSON scores
-- Reuses `get_client_cached()` and `is_overloaded()` from `app/core/llm.py`
+- Sends a structured prompt to Claude asking for JSON scores via `raw_call()` from `app/core/llm.py`
 
 ### `eval/run_eval.py`
 - CLI: `python -m eval.run_eval`
@@ -253,7 +252,7 @@ it adds overhead with no recall benefit. Add `hnsw` if the corpus grows beyond ~
 # app/schemas/query.py
 
 class QueryRequest(BaseModel):
-    question: str
+    question: str = Field(min_length=1, max_length=1000, strip_whitespace=True)
     top_k: int = Field(default=8, ge=1, le=20)  # default from settings
 
 class RetrievedChunk(BaseModel):          # internal transfer object, also in response
@@ -350,7 +349,7 @@ trace: rag_query              (@observe on answer())
 ```
 trace: rag_stream             (lf.trace() in stream_answer() finally block)
 ```
-`stream_answer` accumulates tokens in a `try/finally`; the `finally` calls `lf.trace(output=...)` so the trace is recorded even if the client disconnects mid-stream. The `trace_id` is passed to the frontend in the `done` event payload.
+`stream_answer` accumulates tokens in a `try/finally`; the `finally` calls `lf.trace(output=...)` so the trace is recorded even if the client disconnects mid-stream. The `yield done` event (with `trace_id`) is placed **after** the `try/finally` — not inside `finally` — because a `yield` inside `finally` raises `RuntimeError` when Starlette calls `aclose()` on client disconnect.
 
 ---
 
@@ -475,7 +474,7 @@ domain-specific model improves recall before going to production. The model is a
 ```bash
 # .env.example
 
-# Database (assembled into DATABASE_URL via computed_field in config.py)
+# Database (assembled into DATABASE_URL via @property in config.py — not a computed_field, so it is excluded from model_dump())
 POSTGRES_USER=rag_user
 POSTGRES_PASSWORD=rag_password
 POSTGRES_DB=rag_db
