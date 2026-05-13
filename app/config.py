@@ -37,6 +37,7 @@ class Settings(BaseSettings):
     top_k_default: int = 8
     max_tokens: int = 1024
     judge_max_tokens: int = 256
+    rrf_k: int = 60
     allowed_origins: list[str] = ["http://localhost:3000", "http://localhost:3001"]
 
 

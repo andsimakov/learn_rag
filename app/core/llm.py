@@ -81,6 +81,8 @@ async def stream_generate(
     chunks: list[RetrievedChunk],
     system_prompt: str,
 ) -> AsyncGenerator[str, None]:
+    # Tracing is handled by the caller (query_service.stream_answer) because
+    # @observe does not support async generators.
     settings = get_settings()
     client = get_client_cached()
 

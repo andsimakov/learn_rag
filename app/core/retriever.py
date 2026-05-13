@@ -2,11 +2,9 @@ import re
 
 import numpy as np
 
+from app.config import get_settings
 from app.db.connection import get_pool
 from app.schemas.query import RetrievedChunk
-
-# Standard RRF constant from the original paper.
-_RRF_K = 60
 
 # Words stripped before building the FTS query. Two categories:
 # (1) Generic question words that don't appear in documentation content.
@@ -73,6 +71,7 @@ async def search(
     fts_pool = top_k * 3
     fts_q = _fts_query(query_text)
 
+    rrf_k = get_settings().rrf_k
     rows = await pool.fetch(
         """
         WITH fts_query AS (
@@ -113,7 +112,7 @@ async def search(
         fts_q,
         vec_pool,
         fts_pool,
-        _RRF_K,
+        rrf_k,
         top_k,
     )
     return [

@@ -61,6 +61,10 @@ async def run() -> None:
             print(f"   Faithfulness {score.faithfulness}/5  Relevance {score.relevance}/5")
             print(f"   {score.reasoning}\n")
 
+        if not results:
+            print("No results — nothing to score.")
+            return
+
         sep = "─" * (_COL_W + 30)
         print(sep)
         avg_f = sum(r["faithfulness"] for r in results) / len(results)
