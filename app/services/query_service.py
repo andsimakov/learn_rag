@@ -68,5 +68,4 @@ async def stream_answer(request: QueryRequest) -> AsyncGenerator[dict, None]:
             trace_id = trace.id
         except Exception:
             log.warning("LangFuse trace failed", exc_info=True)
-
-    yield {"type": "done", "trace_id": trace_id}
+        yield {"type": "done", "trace_id": trace_id}
