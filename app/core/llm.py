@@ -77,7 +77,7 @@ async def generate(
 
 
 async def raw_call(
-    messages: list[dict],
+    messages: list[dict[str, object]],
     *,
     system_prompt: str | None = None,
     max_tokens: int | None = None,

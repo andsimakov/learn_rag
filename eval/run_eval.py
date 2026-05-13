@@ -18,8 +18,7 @@ import sys  # noqa: E402
 from datetime import UTC, datetime  # noqa: E402
 from pathlib import Path  # noqa: E402
 
-from langfuse import get_client  # noqa: E402
-
+from app.core.tracing import get_client  # noqa: E402
 from app.db.connection import close_pool, create_pool  # noqa: E402
 from app.schemas.query import QueryRequest  # noqa: E402
 from app.services.query_service import answer  # noqa: E402

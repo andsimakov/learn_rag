@@ -24,6 +24,7 @@ async def answer(request: QueryRequest) -> QueryResponse:
     vector = await embedder.embed(request.question)
     chunks = await retriever.search(vector, request.question, request.top_k)
     if not chunks:
+        lf.set_current_trace_io(output={"answer": "No relevant documentation found."})
         return QueryResponse(answer="No relevant documentation found.", sources=[], trace_id="")
     answer_text = await generate(
         question=request.question,
@@ -37,7 +38,7 @@ async def answer(request: QueryRequest) -> QueryResponse:
     return QueryResponse(answer=answer_text, sources=chunks, trace_id=trace_id)
 
 
-async def stream_answer(request: QueryRequest) -> AsyncGenerator[dict, None]:
+async def stream_answer(request: QueryRequest) -> AsyncGenerator[dict[str, object], None]:
     # @observe cannot decorate async generators — trace manually after streaming completes.
     vector = await embedder.embed(request.question)
     chunks = await retriever.search(vector, request.question, request.top_k)
@@ -67,4 +68,5 @@ async def stream_answer(request: QueryRequest) -> AsyncGenerator[dict, None]:
             trace_id = trace.id
         except Exception:
             log.warning("LangFuse trace failed", exc_info=True)
-        yield {"type": "done", "trace_id": trace_id}
+
+    yield {"type": "done", "trace_id": trace_id}
