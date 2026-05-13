@@ -1,11 +1,10 @@
 import json
 import re
 
-import anthropic
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.config import get_settings
-from app.core.llm import LLMOverloadedError, get_client_cached, is_overloaded
+from app.core.llm import raw_call
 from app.schemas.query import RetrievedChunk
 
 
@@ -51,34 +50,21 @@ async def judge(
 ) -> EvalScore:
     """Use Claude as a judge to score a RAG answer on faithfulness and relevance."""
     settings = get_settings()
-    client = get_client_cached()
-
     context = "\n\n---\n\n".join(f"[{chunk.source_url}]\n{chunk.content}" for chunk in chunks)
-
-    try:
-        response = await client.messages.create(
-            model=settings.anthropic_model,
-            max_tokens=settings.judge_max_tokens,
-            messages=[
-                {
-                    "role": "user",
-                    "content": _JUDGE_PROMPT.format(
-                        question=question,
-                        context=context,
-                        answer=answer,
-                        reference_answer=reference_answer,
-                    ),
-                }
-            ],
-        )
-    except anthropic.APIStatusError as exc:
-        if is_overloaded(exc):
-            raise LLMOverloadedError from exc
-        raise RuntimeError("Judge LLM call failed") from exc
-
-    if not response.content or response.content[0].type != "text":
-        raise ValueError("Judge received an empty or non-text response from LLM")
-    text = response.content[0].text
+    text = await raw_call(
+        [
+            {
+                "role": "user",
+                "content": _JUDGE_PROMPT.format(
+                    question=question,
+                    context=context,
+                    answer=answer,
+                    reference_answer=reference_answer,
+                ),
+            }
+        ],
+        max_tokens=settings.judge_max_tokens,
+    )
     match = re.search(r"\{.*\}", text, re.DOTALL)
     if not match:
         raise ValueError(f"No JSON object in judge response: {text!r}")

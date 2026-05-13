@@ -60,7 +60,7 @@ async def run() -> None:
         dsn=settings.database_url,
         min_size=2,
         max_size=5,
-        init=lambda conn: register_vector(conn),
+        init=register_vector,
     )
 
     try:

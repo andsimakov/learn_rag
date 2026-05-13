@@ -76,6 +76,33 @@ async def generate(
     return answer_text
 
 
+async def raw_call(
+    messages: list[dict],
+    *,
+    system_prompt: str | None = None,
+    max_tokens: int | None = None,
+) -> str:
+    """Single Claude API call with standard error normalisation — no RAG-specific formatting."""
+    settings = get_settings()
+    client = get_client_cached()
+    kwargs: dict = dict(
+        model=settings.anthropic_model,
+        max_tokens=max_tokens if max_tokens is not None else settings.max_tokens,
+        messages=messages,
+    )
+    if system_prompt is not None:
+        kwargs["system"] = system_prompt
+    try:
+        response = await client.messages.create(**kwargs)
+    except anthropic.APIStatusError as exc:
+        if is_overloaded(exc):
+            raise LLMOverloadedError from exc
+        raise
+    if not response.content or response.content[0].type != "text":
+        raise ValueError("LLM returned an empty or non-text response")
+    return response.content[0].text
+
+
 async def stream_generate(
     question: str,
     chunks: list[RetrievedChunk],
