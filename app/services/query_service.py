@@ -1,10 +1,9 @@
 import logging
 from collections.abc import AsyncGenerator
 
-from langfuse import get_client, observe
-
 from app.core import embedder, retriever
 from app.core.llm import generate, stream_generate
+from app.core.tracing import get_client, observe
 from app.schemas.query import QueryRequest, QueryResponse
 
 log = logging.getLogger(__name__)

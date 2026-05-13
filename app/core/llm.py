@@ -2,9 +2,9 @@ from collections.abc import AsyncGenerator
 from functools import lru_cache
 
 import anthropic
-from langfuse import get_client, observe
 
 from app.config import get_settings
+from app.core.tracing import get_client, observe
 from app.schemas.query import RetrievedChunk
 
 
@@ -85,7 +85,7 @@ async def raw_call(
     """Single Claude API call with standard error normalisation — no RAG-specific formatting."""
     settings = get_settings()
     client = get_client_cached()
-    kwargs: dict = dict(
+    kwargs: dict[str, object] = dict(
         model=settings.anthropic_model,
         max_tokens=max_tokens if max_tokens is not None else settings.max_tokens,
         messages=messages,
