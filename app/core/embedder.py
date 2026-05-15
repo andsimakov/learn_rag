@@ -14,7 +14,7 @@ def _load_model() -> SentenceTransformer:
 
 
 async def warm_up() -> None:
-    """Pre-load the model and assert its output dim matches settings.embedding_dim."""
+    """Preload the model and assert its output dim matches settings.embedding_dim."""
     model = _load_model()
     settings = get_settings()
     loop = asyncio.get_running_loop()
