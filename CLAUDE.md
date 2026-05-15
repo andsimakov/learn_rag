@@ -47,9 +47,9 @@ make down              # stop all Docker services (preserves volumes)
 ### Docker (full stack)
 
 ```bash
-make up                                   # build and start DB + API + client
-make down                                 # stop (preserves volumes)
-docker compose down -v                    # stop and delete volumes (data loss!)
+make up                 # build and start DB + API + client
+make down               # stop (preserves volumes)
+docker compose down -v  # stop and delete volumes (DATA LOSS!)
 ```
 
 `NEXT_PUBLIC_API_URL` defaults to `http://localhost:8000` and is baked into the
@@ -62,9 +62,11 @@ client bundle at build time. Override before building if deploying elsewhere:
 app/
   api/routes/      # HTTP layer only — no business logic
   services/        # business logic (query_service.py owns the RAG flow)
-  core/            # infrastructure primitives (embedder, retriever, llm, tracing)
+  core/            # infrastructure primitives (embedder, retriever, llm,
+                     tracing)
   db/              # asyncpg pool + schema.sql
-  schemas/         # Pydantic models (QueryRequest, QueryResponse, RetrievedChunk)
+  schemas/         # Pydantic models (QueryRequest, QueryResponse,
+                     RetrievedChunk)
 ingestion/         # one-shot CLI pipeline (fetch → chunk → embed → upsert)
 eval/              # offline evaluation (golden_dataset.json + LLM-as-judge)
   results/         # timestamped JSON score files — gitignored
@@ -141,6 +143,13 @@ replaced with `<<<FETCH:path>>>` markers during chunking; `pipeline.py` fetches 
 files from GitHub and substitutes them as fenced code blocks before embedding. MDX paths start with
 `../../` which is stripped to a repo-relative path before fetching. Re-run `make ingest` after any
 chunker change.
+
+**JSON logging — `app/core/logging.py`**
+All `print()` calls replaced with structured `logging` throughout. `configure_logging()` must be
+called once at each process entrypoint (`app/main.py`, `ingestion/pipeline.py`, `eval/run_eval.py`).
+`LOG_FORMAT=json` (default) emits newline-delimited JSON; `LOG_FORMAT=text` emits human-readable
+lines for local dev. `LOG_LEVEL` controls verbosity (default `INFO`). Pass extra context fields via
+`extra={"key": value}` — they appear as top-level keys in the JSON output.
 
 ## Architecture rules
 

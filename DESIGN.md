@@ -44,7 +44,7 @@ portfolio project demonstrating real LLM engineering practices.
 │  golden_dataset.json ──► RAG pipeline ──► LLM-as-judge             │
 │                                               │                    │
 │                                               ▼                    │
-│                                       score report (stdout)        │
+│                                       structured log + JSON file   │
 └────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -99,7 +99,8 @@ learn_rag/
 ├── .env.example                # required env vars documented
 │
 ├── app/                        # FastAPI service
-│   ├── main.py                 # app factory, lifespan, CORS, router registration
+│   ├── main.py                 # app factory, lifespan, CORS, router
+│   │                             registration
 │   ├── config.py               # pydantic-settings: all env vars in one place
 │   │
 │   ├── api/
@@ -108,20 +109,24 @@ learn_rag/
 │   │       └── health.py       # GET  /health
 │   │
 │   ├── services/
-│   │   └── query_service.py    # answer() + stream_answer() — embed → retrieve → generate → trace
+│   │   └── query_service.py    # answer() + stream_answer() — embed → retrieve
+│   │                             → generate → trace
 │   │
 │   ├── core/
 │   │   ├── embedder.py         # sentence-transformers wrapper (async-safe)
 │   │   ├── retriever.py        # hybrid BM25+vector RRF search
-│   │   ├── llm.py              # generate(), raw_call(), stream_generate(), LLMOverloadedError
-│   │   └── tracing.py          # re-exports observe + get_client — single import point for tracing
+│   │   ├── llm.py              # generate(), raw_call(), stream_generate(),
+│   │   │                         LLMOverloadedError
+│   │   ├── logging.py          # configure_logging(), JSON + text formatters
+│   │   └── tracing.py          # re-exports observe + get_client — single
+│   │                             import point for tracing
 │   │
 │   ├── db/
 │   │   ├── connection.py       # asyncpg pool init + teardown
 │   │   └── schema.sql          # DDL: pgvector extension + documents table
 │   │
 │   └── schemas/
-│       └── query.py            # Pydantic models: QueryRequest, QueryResponse, RetrievedChunk
+│       └── query.py            # Pydantic models: QueryRequest, QueryResponse, │                                 RetrievedChunk
 │
 ├── ingestion/
 │   ├── fetcher.py              # GitHub API → raw markdown files
@@ -131,14 +136,16 @@ learn_rag/
 ├── eval/
 │   ├── golden_dataset.json     # 15 hand-crafted Q&A pairs
 │   ├── judge.py                # EvalScore model + LLM-as-judge scoring
-│   ├── run_eval.py             # CLI: runs eval loop, prints score table, saves JSON
+│   ├── run_eval.py             # CLI: runs eval loop, logs scores, saves JSON
 │   └── results/                # timestamped JSON score files (gitignored)
 │
 └── client/                     # Next.js 16 chat frontend
     └── src/
         ├── app/                # App Router: page.tsx (chat UI), layout.tsx
-        ├── components/         # ChatInput, MessageList, MessageItem, SourcesList
-        ├── lib/api.ts          # fetch-based SSE client (async generator, AbortSignal)
+        ├── components/         # ChatInput, MessageList, MessageItem,
+        │                         SourcesList
+        ├── lib/api.ts          # fetch-based SSE client (async generator,
+        │                         AbortSignal)
         └── types/api.ts        # TypeScript interfaces matching backend schemas
 ```
 
@@ -212,7 +219,7 @@ learn_rag/
 - CLI: `python -m eval.run_eval`
 - Loads `golden_dataset.json`
 - For each entry: run RAG pipeline → judge → collect score
-- Prints a table with per-question scores + aggregate averages
+- Emits structured JSON log lines per question with scores + aggregate averages
 - Persists results to `eval/results/<timestamp>.json` for regression tracking
 
 ---
@@ -492,6 +499,7 @@ LANGFUSE_BASE_URL=https://cloud.langfuse.com
 
 # App
 LOG_LEVEL=INFO
+LOG_FORMAT=json       # json (default) | text (human-readable for local dev)
 TOP_K_DEFAULT=8
 MAX_TOKENS=1024
 ALLOWED_ORIGINS=["http://localhost:3000","http://localhost:3001"]  # add production origin as needed

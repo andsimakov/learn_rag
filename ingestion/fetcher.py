@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 import httpx
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 _REPO = "fastapi/fastapi"
 _BRANCH = "master"
@@ -56,7 +56,7 @@ async def fetch_code_files(paths: list[str]) -> dict[str, str]:
     code_map: dict[str, str] = {}
     for path, result in zip(paths, results):
         if isinstance(result, Exception):
-            log.warning("Could not fetch %s: %s", path, result)
+            logger.warning("could not fetch code file", extra={"path": path, "error": str(result)})
         else:
             code_map[result.path] = result.content
     return code_map
@@ -85,7 +85,7 @@ async def fetch_fastapi_docs() -> list[DocFile]:
             and (any(item["path"].startswith(p) for p in _ALLOWED_PREFIXES) or item["path"] in _ALLOWED_FILES)
         ]
 
-        log.info("Found %d markdown files", len(paths))
+        logger.info("found markdown files", extra={"count": len(paths)})
 
         results = await asyncio.gather(
             *[_download(client, path, semaphore) for path in paths],
@@ -95,7 +95,7 @@ async def fetch_fastapi_docs() -> list[DocFile]:
     docs: list[DocFile] = []
     for path, result in zip(paths, results):
         if isinstance(result, Exception):
-            log.warning("Could not fetch %s: %s", path, result)
+            logger.warning("could not fetch doc file", extra={"path": path, "error": str(result)})
         else:
             docs.append(result)
     return docs

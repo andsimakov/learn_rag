@@ -9,7 +9,7 @@ from app.core.llm import LLMOverloadedError
 from app.schemas.query import QueryRequest, QueryResponse
 from app.services.query_service import answer, stream_answer
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -23,7 +23,7 @@ async def query(request: QueryRequest) -> QueryResponse:
             detail="The AI service is temporarily overloaded — please try again in a moment.",
         ) from exc
     except Exception as exc:
-        log.exception("Query failed")
+        logger.exception("Query failed")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Internal server error") from exc
 
 
@@ -34,7 +34,7 @@ async def query_stream(request: QueryRequest) -> StreamingResponse:
             async for event in stream_answer(request):
                 yield f"data: {json.dumps(event)}\n\n"
         except Exception as exc:
-            log.exception("Stream failed")
+            logger.exception("Stream failed")
             msg = (
                 "The AI service is temporarily overloaded — please try again in a moment."
                 if isinstance(exc, LLMOverloadedError)

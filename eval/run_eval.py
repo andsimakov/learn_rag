@@ -13,20 +13,25 @@ load_dotenv()
 
 import asyncio  # noqa: E402
 import json  # noqa: E402
+import logging  # noqa: E402
 import os  # noqa: E402
 import sys  # noqa: E402
 from datetime import UTC, datetime  # noqa: E402
 from pathlib import Path  # noqa: E402
 
+from app.core.logging import configure_logging  # noqa: E402
 from app.core.tracing import get_client  # noqa: E402
 from app.db.connection import close_pool, create_pool  # noqa: E402
 from app.schemas.query import QueryRequest  # noqa: E402
 from app.services.query_service import answer  # noqa: E402
 from eval.judge import judge  # noqa: E402
 
+configure_logging()
+
+logger = logging.getLogger(__name__)
+
 _DATASET_PATH = Path(__file__).parent / "golden_dataset.json"
 _RESULTS_DIR = Path(__file__).parent / "results"
-_COL_W = 55  # truncation width for question column in report
 
 
 async def run() -> None:
@@ -36,14 +41,13 @@ async def run() -> None:
 
     try:
         results = []
-        print(f"\nEvaluating {len(dataset)} questions…\n")
+        logger.info("starting evaluation", extra={"total": len(dataset)})
 
         for i, entry in enumerate(dataset):
             question: str = entry["question"]
             reference: str = entry["reference_answer"]
 
-            q_display = question[:_COL_W] + "…" if len(question) > _COL_W else question
-            print(f"[{i + 1}/{len(dataset)}] {q_display}", flush=True)
+            logger.info("evaluating question", extra={"index": i + 1, "total": len(dataset), "question": question})
 
             response = await answer(QueryRequest(question=question))
             score = await judge(question, response.sources, response.answer, reference)
@@ -57,18 +61,18 @@ async def run() -> None:
                 }
             )
 
-            print(f"   Faithfulness {score.faithfulness}/5  Relevance {score.relevance}/5")
-            print(f"   {score.reasoning}\n")
+            logger.info(
+                "question scored",
+                extra={"faithfulness": score.faithfulness, "relevance": score.relevance, "reasoning": score.reasoning},
+            )
 
         if not results:
-            print("No results — nothing to score.")
+            logger.warning("no results to score")
             return
 
-        sep = "─" * (_COL_W + 30)
-        print(sep)
         avg_f = sum(r["faithfulness"] for r in results) / len(results)
         avg_r = sum(r["relevance"] for r in results) / len(results)
-        print(f"Average  —  Faithfulness: {avg_f:.1f}/5   Relevance: {avg_r:.1f}/5")
+        logger.info("evaluation complete", extra={"avg_faithfulness": avg_f, "avg_relevance": avg_r})
 
         _RESULTS_DIR.mkdir(exist_ok=True)
         ts = datetime.now(UTC).strftime("%Y-%m-%dT%H-%M-%SZ")
@@ -76,7 +80,7 @@ async def run() -> None:
         out_path.write_text(
             json.dumps({"avg_faithfulness": avg_f, "avg_relevance": avg_r, "results": results}, indent=2)
         )
-        print(f"Results saved → {out_path}")
+        logger.info("results saved", extra={"path": str(out_path)})
     finally:
         get_client().flush()
         await close_pool()
@@ -87,9 +91,7 @@ if __name__ == "__main__":
     try:
         asyncio.run(run())
     except Exception:
-        import traceback
-
-        traceback.print_exc()
+        logger.exception("eval failed")
         _exit_code = 1
     finally:
         sys.stdout.flush()

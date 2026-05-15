@@ -9,6 +9,10 @@ from dotenv import load_dotenv
 # would find nothing without this call.
 load_dotenv()
 
+from app.core.logging import configure_logging  # noqa: E402
+
+configure_logging()
+
 from fastapi import FastAPI  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 
