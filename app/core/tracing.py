@@ -8,7 +8,7 @@
 #   async def my_fn(...): ...
 #
 #   lf = get_client()
-#   lf.set_current_trace_io(input=..., output=...)
+#   lf.update_current_span(input=..., output=...)          # spans (default @observe)
 #   lf.update_current_generation(model=..., input=..., output=..., usage_details=...)
 #   lf.get_current_trace_id()
 from langfuse import get_client, observe

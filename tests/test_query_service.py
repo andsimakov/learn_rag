@@ -17,6 +17,13 @@ def _make_request() -> QueryRequest:
     return QueryRequest(question="What is FastAPI?", top_k=5)
 
 
+def _mock_lf(mocker, trace_id: str = "trace-xyz"):
+    mock_lf = mocker.MagicMock()
+    mock_lf.get_current_trace_id.return_value = trace_id
+    mocker.patch("app.services.query_service.get_client", return_value=mock_lf)
+    return mock_lf
+
+
 async def test_answer_happy_path(mocker):
     mocker.patch(
         "app.services.query_service.embedder.embed",
@@ -33,9 +40,7 @@ async def test_answer_happy_path(mocker):
         new_callable=mocker.AsyncMock,
         return_value="FastAPI is a web framework.",
     )
-    mock_lf = mocker.MagicMock()
-    mock_lf.get_current_trace_id.return_value = "trace-xyz"
-    mocker.patch("app.services.query_service.get_client", return_value=mock_lf)
+    mock_lf = _mock_lf(mocker, "trace-xyz")
 
     result = await answer(_make_request())
 
@@ -43,6 +48,10 @@ async def test_answer_happy_path(mocker):
     assert result.answer == "FastAPI is a web framework."
     assert result.trace_id == "trace-xyz"
     assert len(result.sources) == 1
+    mock_lf.update_current_span.assert_called_once_with(
+        input={"question": "What is FastAPI?", "top_k": 5},
+        output={"answer": "FastAPI is a web framework."},
+    )
 
 
 async def test_answer_no_chunks_returns_fallback(mocker):
@@ -56,8 +65,6 @@ async def test_answer_no_chunks_returns_fallback(mocker):
         new_callable=mocker.AsyncMock,
         return_value=[],
     )
-    mock_lf = mocker.MagicMock()
-    mocker.patch("app.services.query_service.get_client", return_value=mock_lf)
 
     result = await answer(_make_request())
 
@@ -72,7 +79,6 @@ async def _token_generator(*tokens: str):
 
 
 async def test_stream_answer_happy_path(mocker):
-    mocker.patch("app.core.retriever.get_pool", return_value=mocker.MagicMock())
     mocker.patch(
         "app.services.query_service.embedder.embed",
         new_callable=mocker.AsyncMock,
@@ -87,12 +93,7 @@ async def test_stream_answer_happy_path(mocker):
         "app.services.query_service.stream_generate",
         return_value=_token_generator("Hello", " world"),
     )
-
-    mock_trace = mocker.MagicMock()
-    mock_trace.id = "trace-abc"
-    mock_lf = mocker.MagicMock()
-    mock_lf.trace.return_value = mock_trace
-    mocker.patch("app.services.query_service.get_client", return_value=mock_lf)
+    mock_lf = _mock_lf(mocker, "trace-abc")
 
     events = [event async for event in stream_answer(_make_request())]
 
@@ -109,10 +110,13 @@ async def test_stream_answer_happy_path(mocker):
 
     assert len(done_events) == 1
     assert done_events[0]["trace_id"] == "trace-abc"
+    mock_lf.update_current_span.assert_called_once_with(
+        input={"question": "What is FastAPI?", "top_k": 5},
+        output={"answer": "Hello world"},
+    )
 
 
 async def test_stream_answer_langfuse_failure_yields_empty_trace_id(mocker):
-    mocker.patch("app.core.retriever.get_pool", return_value=mocker.MagicMock())
     mocker.patch(
         "app.services.query_service.embedder.embed",
         new_callable=mocker.AsyncMock,
@@ -140,7 +144,6 @@ async def test_stream_answer_langfuse_failure_yields_empty_trace_id(mocker):
 
 
 async def test_stream_answer_no_chunks_yields_fallback(mocker):
-    mocker.patch("app.core.retriever.get_pool", return_value=mocker.MagicMock())
     mocker.patch(
         "app.services.query_service.embedder.embed",
         new_callable=mocker.AsyncMock,

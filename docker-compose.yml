@@ -18,9 +18,41 @@ services:
     networks:
       - backend
 
+  api:
+    build: .
+    profiles: [app]
+    ports:
+      - "127.0.0.1:8000:8000"
+    env_file: .env
+    environment:
+      POSTGRES_HOST: db
+    volumes:
+      - hf_cache:/cache
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - backend
+
+  client:
+    build:
+      context: ./client
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+    profiles: [app]
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      - api
+    restart: unless-stopped
+    networks:
+      - backend
+
 networks:
   backend:
     driver: bridge
 
 volumes:
   pgdata:
+  hf_cache:

@@ -42,6 +42,19 @@ make db-down           # stop DB
 make db-logs           # tail DB logs
 ```
 
+### Docker (full stack)
+
+```bash
+docker compose --profile app up --build   # build and start DB + API + client
+docker compose --profile app up           # start without rebuilding
+docker compose down                       # stop (preserves volumes)
+docker compose down -v                    # stop and delete volumes (data loss!)
+```
+
+`NEXT_PUBLIC_API_URL` defaults to `http://localhost:8000` and is baked into the
+client bundle at build time. Override before building if deploying elsewhere:
+`NEXT_PUBLIC_API_URL=https://api.example.com docker compose --profile app up --build`
+
 ## Project layout
 
 ```
@@ -82,15 +95,11 @@ LangFuse v4's `@observe` doesn't propagate trace context correctly on instance m
 Decorate a module-level function instead. `QueryService` was removed entirely once we confirmed
 the wrapper class added nothing but indirection — `query_service.py` now exposes `answer()` directly.
 
-**`@observe` cannot decorate async generators**
-LangFuse's `@observe` decorator does not support async generator functions. For the streaming path,
-create a trace manually: accumulate tokens, then call `lf.trace(name=..., input=..., output=...)`
-in the `finally` block so the trace is recorded even on client disconnect.
-**Do NOT `yield` inside `finally`.** When Starlette cancels the response (client disconnect), it
-calls `aclose()` on the generator chain, which sends `GeneratorExit`. A `yield` inside `finally`
-at that point raises `RuntimeError: async generator ignored GeneratorExit`. Keep the trace call in
-`finally` and yield the `done` event (with `trace_id`) after the `try/finally` block — it only
-fires on clean completion, while the error path uses the `error` SSE event from the route handler.
+**`@observe` works on async generators in v4**
+`@observe` can decorate async generator functions in LangFuse v4. Both `answer()` and `stream_answer()`
+use `@observe`. Input/output are set explicitly via `lf.update_current_span(input=..., output=...)` —
+`set_current_trace_io()` and `update_current_observation()` do not exist in v4. Wrap all `get_client()`
+calls in try/except so tracing failures degrade gracefully without breaking the stream.
 
 **LangFuse `get_client()` ignores `.env` file**
 `pydantic-settings` reads `.env` into the `Settings` object but does not write to `os.environ`.
@@ -105,6 +114,17 @@ Tests stub `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY` as `"test"`, which sa
 validation but causes the client to flush spans against the real API and receive 401. Fix: set
 `LANGFUSE_TRACING_ENABLED=false` in `tests/conftest.py` — LangFuse v4 checks this env var at init
 time and disables all network activity before any connection is attempted.
+
+**Docker API container — `PermissionError: /nonexistent` on startup**
+The non-root `appuser` has no home directory, so HuggingFace defaults its cache to `/nonexistent`.
+Fix: create `/cache` at image build time and set `HF_HOME=/cache`. The model (~90 MB) is downloaded
+on first container start and persists in the `hf_cache` named Docker volume across rebuilds.
+
+**Docker API image — 5 GB with GPU PyTorch**
+`sentence-transformers` pulls full CUDA PyTorch by default. Fix: install CPU-only torch first via
+`--index-url https://download.pytorch.org/whl/cpu` before the main `uv pip install .`. Reduces
+image from ~5 GB to ~1.1 GB. `pyproject.toml` must be copied before pip install layers so that
+source-file changes don't invalidate the torch cache layer.
 
 **Poor retrieval quality — wrong docs ranking first**
 Fixed with hybrid BM25 + cosine vector search fused via Reciprocal Rank Fusion (RRF, k=60).
