@@ -11,6 +11,7 @@ _STUBS = {
     "ANTHROPIC_API_KEY": "test",
     "LANGFUSE_PUBLIC_KEY": "test",
     "LANGFUSE_SECRET_KEY": "test",
+    "LANGFUSE_TRACING_ENABLED": "false",
 }
 
 for key, value in _STUBS.items():
