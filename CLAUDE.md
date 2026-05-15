@@ -40,14 +40,15 @@ make test              # pytest
 make db-up             # start DB
 make db-down           # stop DB
 make db-logs           # tail DB logs
+make up                # build and start full stack in Docker (DB + API + client)
+make down              # stop all Docker services (preserves volumes)
 ```
 
 ### Docker (full stack)
 
 ```bash
-docker compose --profile app up --build   # build and start DB + API + client
-docker compose --profile app up           # start without rebuilding
-docker compose down                       # stop (preserves volumes)
+make up                                   # build and start DB + API + client
+make down                                 # stop (preserves volumes)
 docker compose down -v                    # stop and delete volumes (data loss!)
 ```
 

@@ -21,6 +21,14 @@ db-down:  ## Stop and remove the database container
 db-logs:  ## Tail database logs
 	docker compose logs -f db
 
+.PHONY: up
+up:  ## Build and start the full stack in Docker (DB + API + client)
+	docker compose --profile app up --build
+
+.PHONY: down
+down:  ## Stop all Docker services (preserves volumes)
+	docker compose --profile app down
+
 # ── Ingestion ─────────────────────────────────────────────────────────────────
 
 .PHONY: ingest
