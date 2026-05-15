@@ -31,5 +31,4 @@ eval/results/
 .qodo/
 
 # Obsidian
-.obsidian/workspace.json
-.obsidian/workspace-mobile.json
+.obsidian/
