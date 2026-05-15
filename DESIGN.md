@@ -349,7 +349,8 @@ python -m ingestion.pipeline
 **Non-streaming path** — decorator-based, fully automatic:
 ```
 trace: rag_query              (@observe on answer())
-  └── generation: llm_call    (@observe(as_type="generation") on generate() — model, tokens, cost)
+  └── generation: llm_call    (@observe(as_type="generation") on generate() —
+                               model, tokens, cost)
 ```
 
 **Streaming path** — manual trace, because `@observe` cannot decorate async generators:

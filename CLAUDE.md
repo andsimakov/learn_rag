@@ -90,19 +90,14 @@ The pgvector pool `init` callback runs `register_vector()` before the schema is 
 then create the pool. See `ingestion/pipeline.py`.
 
 **LangFuse v4 — `langfuse.decorators` does not exist**
-In v4, `observe` and `get_client` moved to the top-level package. The old `langfuse.decorators`
-module is gone. Import via the re-export shim: `from app.core.tracing import observe, get_client`.
+In v4, `observe` and `get_client` moved to the top-level package. The old `langfuse.decorators` module is gone. Import via the re-export shim: `from app.core.tracing import observe, get_client`.
 
 **`@observe` on a class method — `trace_id` is empty**
 LangFuse v4's `@observe` doesn't propagate trace context correctly on instance methods.
-Decorate a module-level function instead. `QueryService` was removed entirely once we confirmed
-the wrapper class added nothing but indirection — `query_service.py` now exposes `answer()` directly.
+Decorate a module-level function instead. `QueryService` was removed entirely once we confirmed the wrapper class added nothing but indirection — `query_service.py` now exposes `answer()` directly.
 
 **`@observe` works on async generators in v4**
-`@observe` can decorate async generator functions in LangFuse v4. Both `answer()` and `stream_answer()`
-use `@observe`. Input/output are set explicitly via `lf.update_current_span(input=..., output=...)` —
-`set_current_trace_io()` and `update_current_observation()` do not exist in v4. Wrap all `get_client()`
-calls in try/except so tracing failures degrade gracefully without breaking the stream.
+`@observe` can decorate async generator functions in LangFuse v4. Both `answer()` and `stream_answer()` use `@observe`. Input/output are set explicitly via `lf.update_current_span(input=..., output=...)` — `set_current_trace_io()` and `update_current_observation()` do not exist in v4. Wrap all `get_client()` calls in try/except so tracing failures degrade gracefully without breaking the stream.
 
 **LangFuse `get_client()` ignores `.env` file**
 `pydantic-settings` reads `.env` into the `Settings` object but does not write to `os.environ`.
@@ -115,19 +110,15 @@ LangFuse v4 uses `LANGFUSE_BASE_URL` (not `LANGFUSE_HOST`). Updated in `config.p
 **LangFuse 401 errors in tests**
 Tests stub `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY` as `"test"`, which satisfies `Settings()`
 validation but causes the client to flush spans against the real API and receive 401. Fix: set
-`LANGFUSE_TRACING_ENABLED=false` in `tests/conftest.py` — LangFuse v4 checks this env var at init
-time and disables all network activity before any connection is attempted.
+`LANGFUSE_TRACING_ENABLED=false` in `tests/conftest.py` — LangFuse v4 checks this env var at init time and disables all network activity before any connection is attempted.
 
 **Docker API container — `PermissionError: /nonexistent` on startup**
 The non-root `appuser` has no home directory, so HuggingFace defaults its cache to `/nonexistent`.
-Fix: create `/cache` at image build time and set `HF_HOME=/cache`. The model (~90 MB) is downloaded
-on first container start and persists in the `hf_cache` named Docker volume across rebuilds.
+Fix: create `/cache` at image build time and set `HF_HOME=/cache`. The model (~90 MB) is downloaded on first container start and persists in the `hf_cache` named Docker volume across rebuilds.
 
 **Docker API image — 5 GB with GPU PyTorch**
 `sentence-transformers` pulls full CUDA PyTorch by default. Fix: install CPU-only torch first via
-`--index-url https://download.pytorch.org/whl/cpu` before the main `uv pip install .`. Reduces
-image from ~5 GB to ~1.1 GB. `pyproject.toml` must be copied before pip install layers so that
-source-file changes don't invalidate the torch cache layer.
+`--index-url https://download.pytorch.org/whl/cpu` before the main `uv pip install .`. Reduces image from ~5 GB to ~1.1 GB. `pyproject.toml` must be copied before pip install layers so that source-file changes don't invalidate the torch cache layer.
 
 **Poor retrieval quality — wrong docs ranking first**
 Fixed with hybrid BM25 + cosine vector search fused via Reciprocal Rank Fusion (RRF, k=60).
@@ -138,18 +129,11 @@ but correct chunks (e.g. "use HTTPException" for "handle errors") ranked outside
 `ivfflat` index — at ~1K chunks exact scan is faster and more accurate than ANN approximation.
 
 **MDX code examples missing from chunks**
-FastAPI docs use `{* docs_src/path/file.py *}` directives to inline Python examples. These are now
-replaced with `<<<FETCH:path>>>` markers during chunking; `pipeline.py` fetches the actual source
-files from GitHub and substitutes them as fenced code blocks before embedding. MDX paths start with
-`../../` which is stripped to a repo-relative path before fetching. Re-run `make ingest` after any
-chunker change.
+FastAPI docs use `{* docs_src/path/file.py *}` directives to inline Python examples. These are now replaced with `<<<FETCH:path>>>` markers during chunking; `pipeline.py` fetches the actual source files from GitHub and substitutes them as fenced code blocks before embedding. MDX paths start with `../../` which is stripped to a repo-relative path before fetching. Re-run `make ingest` after any chunker change.
 
 **JSON logging — `app/core/logging.py`**
-All `print()` calls replaced with structured `logging` throughout. `configure_logging()` must be
-called once at each process entrypoint (`app/main.py`, `ingestion/pipeline.py`, `eval/run_eval.py`).
-`LOG_FORMAT=json` (default) emits newline-delimited JSON; `LOG_FORMAT=text` emits human-readable
-lines for local dev. `LOG_LEVEL` controls verbosity (default `INFO`). Pass extra context fields via
-`extra={"key": value}` — they appear as top-level keys in the JSON output.
+All `print()` calls replaced with structured `logging` throughout. `configure_logging()` must be called once at each process entrypoint (`app/main.py`, `ingestion/pipeline.py`, `eval/run_eval.py`).
+`LOG_FORMAT=json` (default) emits newline-delimited JSON; `LOG_FORMAT=text` emits human-readable lines for local dev. `LOG_LEVEL` controls verbosity (default `INFO`). Pass extra context fields via `extra={"key": value}` — they appear as top-level keys in the JSON output.
 
 ## Architecture rules
 
