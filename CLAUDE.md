@@ -100,6 +100,12 @@ of `app/main.py` before any imports that touch LangFuse.
 **`LANGFUSE_HOST` vs `LANGFUSE_BASE_URL`**
 LangFuse v4 uses `LANGFUSE_BASE_URL` (not `LANGFUSE_HOST`). Updated in `config.py` and `.env.example`.
 
+**LangFuse 401 errors in tests**
+Tests stub `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY` as `"test"`, which satisfies `Settings()`
+validation but causes the client to flush spans against the real API and receive 401. Fix: set
+`LANGFUSE_TRACING_ENABLED=false` in `tests/conftest.py` — LangFuse v4 checks this env var at init
+time and disables all network activity before any connection is attempted.
+
 **Poor retrieval quality — wrong docs ranking first**
 Fixed with hybrid BM25 + cosine vector search fused via Reciprocal Rank Fusion (RRF, k=60).
 Key tuning decisions: (1) FTS uses AND semantics with a stopword list — OR semantics matched
